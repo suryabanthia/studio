@@ -110,3 +110,33 @@ export function updatePromptInTree(
     return item;
   });
 }
+
+export function addPromptNextToSibling(
+  items: Prompt[],
+  siblingId: string,
+  promptToAdd: Prompt
+): { updatedTree: Prompt[]; success: boolean } {
+  // Check at the current level
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].id === siblingId) {
+      const newItems = [...items];
+      newItems.splice(i + 1, 0, promptToAdd); // Insert after the sibling
+      return { updatedTree: newItems, success: true };
+    }
+  }
+
+  // If not found at the current level, recursively search in children of folders
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item.type === 'folder' && item.children) {
+      const result = addPromptNextToSibling(item.children, siblingId, promptToAdd);
+      if (result.success) {
+        const newItems = [...items];
+        newItems[i] = { ...item, children: result.updatedTree };
+        return { updatedTree: newItems, success: true };
+      }
+    }
+  }
+
+  return { updatedTree: items, success: false }; // Sibling not found
+}

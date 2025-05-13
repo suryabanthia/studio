@@ -1,4 +1,3 @@
-
 "use client"
 
 import * as React from "react";
@@ -49,7 +48,7 @@ import { optimizePrompt, type PromptOptimizerInput, type PromptOptimizerOutput }
 import { NewPromptDialog, type NewPromptFormValues } from "@/components/dialogs/new-prompt-dialog";
 import { EditPromptDialog } from "@/components/dialogs/edit-prompt-dialog";
 import { VersionHistoryDialog } from "@/components/dialogs/version-history-dialog";
-import { newId, addPromptToTree, addFolderToTree, updatePromptInTree } from "@/lib/prompt-utils";
+import { newId, addPromptToTree, addFolderToTree, updatePromptInTree, addPromptNextToSibling } from "@/lib/prompt-utils";
 import {
   Home,
   Settings,
@@ -67,7 +66,8 @@ import {
   Sun,
   Palette,
   History,  
-  Star
+  Star,
+  GitFork
 } from "lucide-react";
 import { useTheme } from "next-themes";
 
@@ -189,13 +189,13 @@ const PromptTreeItem: React.FC<{ item: Prompt; level: number; onSelectPrompt: (p
         tooltip={sidebarState === 'collapsed' ? item.name : undefined}
       >
         <Icon className="h-4 w-4 mr-2 flex-shrink-0" />
-        <span className="truncate flex-grow">{item.name}</span>
+         { sidebarState === 'expanded' && <span className="truncate flex-grow">{item.name}</span> }
         {item.isFavorite && <Star className="h-3 w-3 ml-auto text-yellow-400 flex-shrink-0" />}
-        {item.type === "folder" && item.children && (
+        {item.type === "folder" && item.children && sidebarState === 'expanded' && (
           <ChevronDown className={`h-4 w-4 ml-auto transition-transform flex-shrink-0 ${isOpen ? "rotate-180" : ""}`} />
         )}
       </SidebarMenuButton>
-      {item.type === "folder" && isOpen && item.children && (
+      {item.type === "folder" && isOpen && item.children && sidebarState === 'expanded' && (
         <SidebarMenuSub>
           {item.children.map((child) => (
             <PromptTreeItem key={child.id} item={child} level={level + 1} onSelectPrompt={onSelectPrompt} selectedPromptId={selectedPromptId}/>
@@ -218,8 +218,8 @@ const AiOptimizerModal: React.FC<{ open: boolean; onOpenChange: (open: boolean) 
         setPromptToOptimize(initialPrompt || "");
         setSuggestions([]); 
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]); 
+  }, [open, initialPrompt]); 
+
 
   const handleSubmit = async () => {
     if (!promptToOptimize.trim()) {
@@ -315,7 +315,7 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
   const handleImport = () => {
     const fileInput = document.createElement("input");
     fileInput.type = "file";
-    fileInput.accept = ".json";
+    fileInput.accept = ".json, .csv"; // Accept both JSON and CSV
     fileInput.onchange = (event) => {
       const target = event.target as HTMLInputElement;
       const file = target.files?.[0];
@@ -325,37 +325,78 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
           try {
             const content = e.target?.result;
             if (typeof content === 'string') {
-              const importedPrompts = JSON.parse(content);
+              let importedPrompts: any[];
+              if (file.name.endsWith(".json")) {
+                importedPrompts = JSON.parse(content);
+              } else if (file.name.endsWith(".csv")) {
+                // Basic CSV parsing: id,name,type,content,versions,isFavorite,parentId (optional)
+                // This is a simplified parser, for robust CSV, a library would be better.
+                const lines = content.split(/\r\n|\n/);
+                const headers = lines[0].split(',').map(h => h.trim());
+                const requiredHeaders = ['id', 'name', 'type'];
+                if (!requiredHeaders.every(h => headers.includes(h))) {
+                   toast({ title: "Import Failed", description: "CSV must include id, name, and type headers.", variant: "destructive" });
+                   return;
+                }
+
+                importedPrompts = lines.slice(1).map(line => {
+                  const values = line.split(','); // Simple split, doesn't handle commas in values well
+                  const promptData: any = {};
+                  headers.forEach((header, index) => {
+                    let value: any = values[index] ? values[index].trim() : undefined;
+                    if (header === 'versions') value = parseInt(value, 10) || 1;
+                    if (header === 'isFavorite') value = value === 'true';
+                    if (header === 'content' && value === undefined) value = ""; // Default content to empty string if missing
+                    promptData[header] = value;
+                  });
+                  return promptData;
+                }).filter(p => p.id && p.name && p.type); // Basic validation
+              } else {
+                toast({ title: "Import Failed", description: "Unsupported file type.", variant: "destructive" });
+                return;
+              }
               
               if (Array.isArray(importedPrompts) && 
                   (importedPrompts.length === 0 || 
                    (importedPrompts[0] && typeof importedPrompts[0].id === 'string' && typeof importedPrompts[0].name === 'string' && typeof importedPrompts[0].type === 'string'))) {
                 
+                // TODO: Handle CSV parentId to reconstruct hierarchy
+                // For now, CSV imports flattened or requires manual structuring post-import if parentId is complex.
+                // Simple parentId mapping could be done if CSV format specifies it.
+
                 const sanitizedPrompts = importedPrompts.map((prompt: any) => {
-                  // Ensure versions is at least 1 if content exists and versions is missing
-                  const versions = (prompt.versions === undefined && prompt.content !== undefined) ? 1 : prompt.versions;
-                  
-                  // Ensure history array exists and timestamps are Date objects
+                  const versions = (prompt.versions === undefined && prompt.content !== undefined) ? 1 : (Number(prompt.versions) || 1);
                   const history = (prompt.history || []).map((h: any) => ({
                     ...h,
-                    timestamp: new Date(h.timestamp),
+                    timestamp: h.timestamp ? new Date(h.timestamp) : new Date(), // Ensure timestamp is a Date
+                    versionNumber: Number(h.versionNumber) || 0,
                   })).sort((a: PromptVersion, b: PromptVersion) => b.versionNumber - a.versionNumber);
+                  
+                  const children = prompt.children ? prompt.children.map((child: any) => ({...child})) : undefined; // Basic child sanitization
 
-                  return { ...prompt, versions, history };
+                  return { 
+                    ...prompt, 
+                    versions, 
+                    history,
+                    content: prompt.content || "", // Ensure content exists
+                    isFavorite: !!prompt.isFavorite,
+                    icon: prompt.type === 'folder' ? Folder : FileText, // Assign default icons
+                    children: children
+                  };
                 });
   
                 setPrompts(sanitizedPrompts as Prompt[]);
                 setSelectedPrompt(null); 
-                toast({ title: "Import Successful", description: "Prompts imported successfully." });
+                toast({ title: "Import Successful", description: `Prompts imported successfully from ${file.name}.` });
               } else {
-                toast({ title: "Import Failed", description: "Invalid file format. Expected an array of prompts.", variant: "destructive" });
+                toast({ title: "Import Failed", description: "Invalid file format or empty data.", variant: "destructive" });
               }
             } else {
               toast({ title: "Import Failed", description: "Could not read file content.", variant: "destructive" });
             }
-          } catch (error) {
+          } catch (error: any) {
             console.error("Error importing prompts:", error);
-            toast({ title: "Import Failed", description: "Error parsing JSON file. Ensure it's valid.", variant: "destructive" });
+            toast({ title: "Import Failed", description: `Error processing file: ${error.message || "Unknown error"}. Ensure it's valid.`, variant: "destructive" });
           }
         };
         reader.onerror = () => {
@@ -367,33 +408,76 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
     fileInput.click();
   };
   
-  const handleExport = () => {
+  const handleExport = (format: "json" | "csv") => {
     if (prompts.length === 0) {
-      toast({ title: "Export Prompts", description: "No prompts to export.", variant: "default" });
+      toast({ title: `Export Prompts (${format.toUpperCase()})`, description: "No prompts to export.", variant: "default" });
       return;
     }
     try {
-      const jsonString = JSON.stringify(prompts, (key, value) => {
-        // Convert Date objects to ISO strings for consistent JSON output
-        if (key === 'timestamp' && value instanceof Date) {
-          return value.toISOString();
+      let dataString: string;
+      let mimeType: string;
+      let fileExtension: string;
+      const date = new Date().toISOString().split('T')[0]; 
+
+      if (format === "json") {
+        dataString = JSON.stringify(prompts, (key, value) => {
+          if (key === 'timestamp' && value instanceof Date) {
+            return value.toISOString();
+          }
+          // Strip icon functions for JSON export
+          if (key === 'icon' && typeof value === 'function') {
+            return undefined; 
+          }
+          return value;
+        }, 2);
+        mimeType = "application/json";
+        fileExtension = "json";
+      } else { // CSV
+        // Basic CSV export, flattens structure. For complex hierarchy, JSON is better.
+        // Header: id,name,type,content,versions,isFavorite,parentId (if applicable)
+        const flattenPrompts = (items: Prompt[], parentId?: string): any[] => {
+            let flatList: any[] = [];
+            items.forEach(item => {
+                const { children, icon, ...rest } = item; // Exclude children and icon from main object
+                flatList.push({ ...rest, parentId: parentId || 'root' });
+                if (children) {
+                    flatList = flatList.concat(flattenPrompts(children, item.id));
+                }
+            });
+            return flatList;
+        };
+        const flatPrompts = flattenPrompts(prompts);
+        if (flatPrompts.length === 0) {
+           toast({ title: "Export Failed", description: "No data to export to CSV.", variant: "destructive" });
+           return;
         }
-        return value;
-      }, 2); 
-      const blob = new Blob([jsonString], { type: "application/json" });
+        const headers = Object.keys(flatPrompts[0]).join(',');
+        const rows = flatPrompts.map(prompt => 
+            Object.values(prompt).map(value => {
+                if (typeof value === 'string' && (value.includes(',') || value.includes('\n') || value.includes('"'))) {
+                    return `"${value.replace(/"/g, '""')}"`; // Escape quotes and wrap
+                }
+                return value;
+            }).join(',')
+        );
+        dataString = `${headers}\n${rows.join('\n')}`;
+        mimeType = "text/csv";
+        fileExtension = "csv";
+      }
+
+      const blob = new Blob([dataString], { type: mimeType });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      const date = new Date().toISOString().split('T')[0]; 
-      a.download = `promptverse_export_${date}.json`;
+      a.download = `promptverse_export_${date}.${fileExtension}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      toast({ title: "Export Successful", description: "Prompts exported successfully." });
-    } catch (error) {
+      toast({ title: "Export Successful", description: `Prompts exported to ${fileExtension}.` });
+    } catch (error: any) {
       console.error("Error exporting prompts:", error);
-      toast({ title: "Export Failed", description: "An error occurred while exporting prompts.", variant: "destructive" });
+      toast({ title: "Export Failed", description: `An error occurred: ${error.message || "Unknown error"}.`, variant: "destructive" });
     }
   };
   
@@ -421,11 +505,10 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
 
     let newPromptsList = [...prompts];
     if (data.saveLocationType === "existing") {
-      if (data.selectedExistingFolderId) {
+      if (data.selectedExistingFolderId && data.selectedExistingFolderId !== 'root') {
         newPromptsList = addPromptToTree(prompts, data.selectedExistingFolderId, newPromptItem);
-      } else {
+      } else { // Adding to root if 'root' is selected or no folderId
         newPromptsList = [...prompts, newPromptItem];
-        toast({ title: "Warning", description: "No folder selected, prompt added to root.", variant: "default" });
       }
     } else if (data.saveLocationType === "new") {
       const newFolder: Prompt = {
@@ -488,6 +571,51 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
     }
   };
   
+  const handleBranchPrompt = () => {
+    if (!selectedPrompt || selectedPrompt.type !== 'prompt') {
+      toast({
+        title: "Cannot Branch",
+        description: "Please select a prompt to branch.",
+        variant: "destructive",
+      });
+      return;
+    }
+  
+    const branchedPromptName = `${selectedPrompt.name} - Branch`;
+  
+    const newBranchedPrompt: Prompt = {
+      id: newId(),
+      name: branchedPromptName,
+      type: "prompt",
+      icon: selectedPrompt.icon,
+      content: selectedPrompt.content,
+      versions: 1, // New branch starts at version 1
+      isFavorite: selectedPrompt.isFavorite, // Inherit favorite status
+      history: [], // New branch has no prior history
+    };
+  
+    const { updatedTree, success } = addPromptNextToSibling(prompts, selectedPrompt.id, newBranchedPrompt);
+  
+    if (success) {
+      setPrompts(updatedTree);
+      setSelectedPrompt(newBranchedPrompt); // Select the newly branched prompt
+      toast({
+        title: "Prompt Branched",
+        description: `Created branch: "${newBranchedPrompt.name}".`,
+      });
+    } else {
+      // Fallback: if sibling logic fails (e.g., prompt was somehow not in the tree), add to root.
+      const newPromptsList = [...prompts, newBranchedPrompt];
+      setPrompts(newPromptsList);
+      setSelectedPrompt(newBranchedPrompt);
+      toast({
+        title: "Prompt Branched (Root)",
+        description: `Created branch: "${newBranchedPrompt.name}" at the root level as fallback.`,
+        variant: "default",
+      });
+    }
+  };
+
   const sidebarWidth = "280px";
 
   return (
@@ -588,12 +716,33 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
             <Button variant="outline" size="sm" onClick={() => handleOpenOptimizerDialog(selectedPrompt?.content)}>
               <Sparkles className="mr-2 h-4 w-4" /> Optimize
             </Button>
-            <Button variant="outline" size="sm" onClick={handleImport}>
-              <UploadCloud className="mr-2 h-4 w-4" /> Import
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleExport}>
-              <DownloadCloud className="mr-2 h-4 w-4" /> Export
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <UploadCloud className="mr-2 h-4 w-4" /> Import
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleImport}>
+                   Import from File (.json, .csv)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+             <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">
+                        <DownloadCloud className="mr-2 h-4 w-4" /> Export
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleExport("json")}>
+                        Export as JSON
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleExport("csv")}>
+                        Export as CSV
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
             <Button size="sm" onClick={handleOpenNewPromptDialog}>
               <PlusCircle className="mr-2 h-4 w-4" /> New Prompt
             </Button>
@@ -609,12 +758,12 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
                 <div className="flex gap-2">
                   <Button variant="ghost" size="sm" onClick={() => handleOpenOptimizerDialog(selectedPrompt?.content)}><Sparkles className="mr-1 h-4 w-4" /> Optimize</Button>
                   <Button variant="ghost" size="sm" onClick={handleOpenVersionHistory}><History className="mr-1 h-4 w-4" /> Versions ({selectedPrompt.versions || 0})</Button>
-                   <Button variant="ghost" size="sm" onClick={() => toast({title: "Branch clicked", description: "Branching functionality coming soon."})}> Branch</Button>
+                   <Button variant="ghost" size="sm" onClick={handleBranchPrompt} disabled={!selectedPrompt || selectedPrompt.type !== 'prompt'}><GitFork className="mr-1 h-4 w-4" /> Branch</Button>
                 </div>
               </div>
               <Textarea
                 value={selectedPrompt.content ?? ""}
-                readOnly
+                readOnly // Textarea is read-only by default here, edit is via dialog
                 className="w-full min-h-[300px] p-4 font-code text-sm bg-background rounded-md border"
               />
                <div className="mt-4 flex justify-end">
@@ -627,21 +776,25 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
         </main>
       </SidebarInset>
       <CommandDialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
-        <DialogHeader className="p-0 m-0 border-0 sr-only">
-          <DialogTitle>Command Menu</DialogTitle>
-          <DialogDescription>Use this to search for prompts or execute commands.</DialogDescription>
-        </DialogHeader>
+         {/* DialogTitle and DialogDescription are added for accessibility, but visually hidden using sr-only */}
+        <DialogTitle className="sr-only">Command Menu</DialogTitle>
+        <DialogDescription className="sr-only">Use this to search for prompts or execute commands.</DialogDescription>
         <CommandInput placeholder="Type a command or search..." />
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
           <CommandGroup heading="Suggestions">
             <CommandItem onSelect={() => { 
-                const adCopyPrompt = prompts.flatMap(p => p.type === 'folder' && p.children ? p.children.filter(c => c.id === '1-1') : []).flat()[0];
-                if(adCopyPrompt) setSelectedPrompt(adCopyPrompt); 
+                // Attempt to find a specific prompt for demonstration, adjust ID if needed
+                const demoPrompt = prompts.flatMap(p => 
+                    p.type === 'folder' && p.children ? 
+                    p.children.filter(c => c.id === '1-1' && c.type === 'prompt') : 
+                    (p.id === '1-1' && p.type === 'prompt' ? [p] : [])
+                ).flat()[0];
+                if(demoPrompt) { handleSelectPrompt(demoPrompt); }
                 setIsSearchOpen(false); 
             }}>
                 <FileText className="mr-2 h-4 w-4" />
-                <span>Ad Copy Generator</span>
+                <span>Open "Ad Copy Generator"</span>
             </CommandItem>
             <CommandItem onSelect={() => { handleOpenOptimizerDialog(); setIsSearchOpen(false); }}>
                 <Sparkles className="mr-2 h-4 w-4" />
@@ -654,7 +807,10 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
           </CommandGroup>
           <CommandSeparator />
           <CommandGroup heading="Prompts">
-             {prompts.flatMap(p => p.type === 'folder' && p.children ? p.children.filter(c => c.type === 'prompt') : (p.type === 'prompt' ? [p] : [])).map(prompt => (
+             {prompts.flatMap(p => p.type === 'folder' && p.children ? 
+                p.children.filter(c => c.type === 'prompt') : 
+                (p.type === 'prompt' ? [p] : [])
+             ).map(prompt => (
                  prompt && <CommandItem key={prompt.id} onSelect={() => { handleSelectPrompt(prompt); setIsSearchOpen(false); }}>
                     {React.createElement(prompt.icon || FileText, {className: "mr-2 h-4 w-4"})}
                     <span>{prompt.name}</span>
@@ -691,5 +847,3 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
     </SidebarProvider>
   );
 }
-
-    
