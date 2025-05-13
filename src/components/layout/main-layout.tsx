@@ -1,4 +1,3 @@
-
 "use client"
 
 import * as React from "react";
@@ -19,7 +18,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { SidebarInset } from "@/components/ui/sidebar";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -64,7 +63,9 @@ import { NewPromptDialog, type NewPromptFormValues } from "@/components/dialogs/
 import { EditPromptDialog } from "@/components/dialogs/edit-prompt-dialog";
 import { VersionHistoryDialog } from "@/components/dialogs/version-history-dialog";
 import { buildPromptTree } from "@/lib/prompt-utils";
-import type { ClientPrompt, ClientFolder, ClientPromptVersion, FirebasePrompt, FirebaseFolder, FirebasePromptVersion as FirebasePromptVersionType } from "@/types/app.types";
+import type { FirebasePrompt, FirebaseFolder, FirebasePromptVersion as FirebasePromptVersionType } from '@/types/firebase.types';
+import type { ClientPrompt, ClientFolder, ClientPromptVersion } from '@/types/app.types';
+
 import {
   Home,
   Settings,
@@ -87,11 +88,11 @@ import {
   Edit3
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { useAuth, AuthProvider } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import {
+import { 
   createPrompt as createPromptAction,
   updatePrompt as updatePromptAction,
   deletePrompt as deletePromptAction,
@@ -100,7 +101,7 @@ import {
   createFolder as createFolderAction,
   getFolders as getFoldersAction,
   deleteFolder as deleteFolderAction,
-  updateFolder as updateFolderAction,
+  updateFolder as updateFolderAction, // Ensure this is imported
   branchPrompt as branchPromptAction
 } from "@/actions/firebaseActions";
 import {
@@ -110,39 +111,32 @@ import {
 
 
 // Helper to convert Firestore Timestamps in fetched data
-const convertTimestamps = (data: any) => {
-  if (data?.createdAt && typeof data.createdAt === 'object' && data.createdAt.seconds) {
-    data.createdAt = new Date(data.createdAt.seconds * 1000);
-  }
-  if (data?.updatedAt && typeof data.updatedAt === 'object' && data.updatedAt.seconds) {
-    data.updatedAt = new Date(data.updatedAt.seconds * 1000);
-  }
-  if (data?.timestamp && typeof data.timestamp === 'object' && data.timestamp.seconds) { // For versions
-    data.timestamp = new Date(data.timestamp.seconds * 1000);
-  }
-
-  // Firebase Timestamps are already converted to Date objects by Firestore SDK when fetched
-  // This is more for data coming directly from API routes which might be serialized Firestore Timestamps
-  if (data?.createdAt && typeof data.createdAt === 'string') {
-    data.createdAt = new Date(data.createdAt);
-  }
-  if (data?.updatedAt && typeof data.updatedAt === 'string') {
-    data.updatedAt = new Date(data.updatedAt);
-  }
-  if (data?.timestamp && typeof data.timestamp === 'string') { // For versions
-    data.timestamp = new Date(data.timestamp);
-  }
+const convertTimestamps = (data: any): any => {
+  if (!data) return data;
 
   if (Array.isArray(data)) {
     return data.map(convertTimestamps);
   }
 
-  if (typeof data === 'object' && data !== null) {
-    for (const key in data) {
-      if (Object.prototype.hasOwnProperty.call(data, key)) {
-        data[key] = convertTimestamps(data[key]);
+  if (typeof data === 'object') {
+    const newObj: any = { ...data };
+    for (const key in newObj) {
+      if (Object.prototype.hasOwnProperty.call(newObj, key)) {
+        if (newObj[key] && typeof newObj[key] === 'object' && newObj[key].seconds !== undefined && newObj[key].nanoseconds !== undefined) {
+          // This looks like a Firestore Timestamp object
+          newObj[key] = new Date(newObj[key].seconds * 1000 + newObj[key].nanoseconds / 1000000);
+        } else if (typeof newObj[key] === 'string' && /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z/.test(newObj[key])) {
+          // This looks like an ISO string
+          const date = new Date(newObj[key]);
+          if (!isNaN(date.getTime())) {
+            newObj[key] = date;
+          }
+        } else {
+          newObj[key] = convertTimestamps(newObj[key]);
+        }
       }
     }
+    return newObj;
   }
   return data;
 };
@@ -258,7 +252,7 @@ const AiOptimizerModal: React.FC<{ open: boolean; onOpenChange: (open: boolean) 
             Enter your prompt below to get AI-powered suggestions for improvement.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-4 px-6">
+        <div className="grid gap-4 py-4">
           <Textarea
             placeholder="Enter your prompt here..."
             value={promptToOptimize}
@@ -277,7 +271,7 @@ const AiOptimizerModal: React.FC<{ open: boolean; onOpenChange: (open: boolean) 
             </div>
           )}
         </div>
-        <div className="flex justify-end gap-2 p-6 border-t">
+        <div className="flex justify-end gap-2 p-6 pt-4 border-t">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={handleSubmit} disabled={isLoading}>
             {isLoading ? "Optimizing..." : "Optimize Prompt"}
@@ -401,9 +395,9 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
     },
     onSuccess: (updatedPrompt) => {
       queryClientHook.invalidateQueries({ queryKey: ['prompts', user?.uid] });
-      queryClientHook.invalidateQueries({ queryKey: ['promptVersions', updatedPrompt?.id, user?.uid] });
+      queryClientHook.invalidateQueries({ queryKey: ['promptVersions', updatedPrompt?.id, user?.uid] }); // Refetch versions for this prompt
       if (updatedPrompt) {
-        setSelectedItem(convertTimestamps(updatedPrompt) as ClientPrompt);
+        setSelectedItem(convertTimestamps(updatedPrompt) as ClientPrompt); // Update selected item
       }
       setIsEditPromptDialogOpen(false);
       toast({ title: "Success", description: `Prompt "${updatedPrompt?.name}" updated.` });
@@ -419,6 +413,12 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
         const result = await deletePromptAction(item.id);
         if (result.error) throw new Error(result.error);
       } else if (item.type === 'folder') {
+        // Before deleting a folder, check if it's empty. The backend might enforce this,
+        // but a client-side check can provide immediate feedback.
+        const folderHasContent = promptsData?.some(p => p.folderId === item.id) || foldersData?.some(f => f.parentId === item.id);
+        if (folderHasContent) {
+          throw new Error("Folder is not empty. Please delete or move its contents first.");
+        }
         const result = await deleteFolderAction(item.id);
         if (result.error) throw new Error(result.error);
       } else {
@@ -463,8 +463,8 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
 
   const handleLogout = async () => {
     await signOut();
-    queryClientHook.clear();
-    router.push('/login');
+    queryClientHook.clear(); // Clear react-query cache on logout
+    // Navigation to /login is handled by AuthContext's useEffect
   };
 
 
@@ -544,9 +544,9 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
     updatePromptMutation.mutate({
       id: currentPrompt.id,
       content: newContent,
-      // name: currentPrompt.name, // Keep existing name unless changed
-      // isFavorite: currentPrompt.isFavorite, // Keep existing favorite status unless changed
-      // folderId: currentPrompt.folderId // Keep existing folder unless changed
+      // Other fields like name, folderId, isFavorite would be handled
+      // by a more comprehensive edit form if needed.
+      // For now, this only updates content and triggers versioning.
     });
   };
 
@@ -594,13 +594,25 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
 
   const sidebarWidth = "280px";
 
+  React.useEffect(() => {
+    if (!authLoading && !user && typeof window !== 'undefined' && window.location.pathname !== '/login' && window.location.pathname !== '/signup') {
+      router.push('/login');
+    }
+  }, [authLoading, user, router]);
+
+
   if (authLoading || ((promptsLoading || foldersLoading) && !promptsData && !foldersData && user)) {
     return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
   }
-  if (!authLoading && !user && typeof window !== 'undefined' && window.location.pathname !== '/login' && window.location.pathname !== '/signup') {
-      router.push('/login');
+  
+  // This check should ideally be handled by AuthContext's redirection logic.
+  // If user is null and not loading, AuthContext should redirect.
+  // Keeping a minimal check here for safety during initial load.
+  if (!user && !authLoading && typeof window !== 'undefined' && window.location.pathname !== '/login' && window.location.pathname !== '/signup') {
+    // Return loading spinner while AuthContext redirects
     return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
   }
+
 
   if (promptsError || foldersError) {
     return <div className="flex h-screen items-center justify-center text-destructive">Error loading data: {(promptsError || foldersError)?.message}. Please try refreshing. If the issue persists, check your Firebase configuration.</div>;
@@ -613,20 +625,20 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
           --sidebar-width: ${sidebarWidth} !important;
         }
       `}</style>
-      <Sidebar collapsible="icon" variant="sidebar" className="border-r border-sidebar-border">
+      <Sidebar collapsible="icon" variant="sidebar" className="border-r border-sidebar-border bg-sidebar">
         <SidebarHeader className="p-4 h-[72px] flex items-center justify-between">
            <Link href="/" className="flex items-center gap-2 logo-glow">
              <Palette className="w-8 h-8 text-primary" />
-            <h1 className="text-xl font-bold text-foreground group-data-[collapsible=icon]:hidden">PromptVerse</h1>
+            <h1 className="text-xl font-bold text-sidebar-foreground group-data-[collapsible=icon]:hidden">PromptVerse</h1>
           </Link>
-          <SidebarTrigger className="group-data-[collapsible=icon]:hidden" />
+          <SidebarTrigger className="group-data-[collapsible=icon]:hidden text-sidebar-foreground" />
         </SidebarHeader>
         <SidebarContent className="p-2">
           <div className="mb-2 px-2 group-data-[collapsible=icon]:hidden">
-            <Button variant="outline" className="w-full justify-start text-muted-foreground" onClick={() => setIsSearchOpen(true)}>
+            <Button variant="outline" className="w-full justify-start text-muted-foreground border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" onClick={() => setIsSearchOpen(true)}>
               <Search className="w-4 h-4 mr-2" />
               Search...
-              <kbd className="ml-auto pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+              <kbd className="ml-auto pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border border-sidebar-border bg-sidebar-accent px-1.5 font-mono text-[10px] font-medium text-sidebar-accent-foreground opacity-100">
                 <span className="text-xs">⌘</span>K
               </kbd>
             </Button>
@@ -642,7 +654,7 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
               </SidebarMenuItem>
 
               <SidebarGroup>
-                <SidebarGroupLabel tooltip="Prompts & Folders" className="flex items-center">
+                <SidebarGroupLabel tooltip="Prompts & Folders" className="flex items-center text-sidebar-foreground/70">
                   <BookOpen className="h-4 w-4 mr-2"/> Items
                 </SidebarGroupLabel>
                  {promptTree.map((item) => (
@@ -651,7 +663,7 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
               </SidebarGroup>
 
               <SidebarGroup>
-                <SidebarGroupLabel tooltip="Tools" className="flex items-center"> Tools </SidebarGroupLabel>
+                <SidebarGroupLabel tooltip="Tools" className="flex items-center text-sidebar-foreground/70"> Tools </SidebarGroupLabel>
                  <SidebarMenuItem>
                     <SidebarMenuButton onClick={() => handleOpenOptimizerDialog()} tooltip="AI Optimizer">
                       <Sparkles className="h-4 w-4" /> <span className="truncate">AI Optimizer</span>
@@ -664,14 +676,14 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
         <SidebarFooter className="p-4 border-t border-sidebar-border group-data-[collapsible=icon]:p-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="w-full justify-start p-2">
+              <Button variant="ghost" className="w-full justify-start p-2 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
                 <Avatar className="h-8 w-8 mr-2">
                   <AvatarImage src={user?.photoURL || `https://picsum.photos/seed/${user?.uid || 'default'}/40/40?grayscale`} alt="User Avatar" data-ai-hint="profile avatar"/>
                   <AvatarFallback>{user?.email?.substring(0,2).toUpperCase() || 'PV'}</AvatarFallback>
                 </Avatar>
                 <div className="truncate group-data-[collapsible=icon]:hidden">
-                  <p className="font-semibold text-sm">{user?.displayName || user?.email?.split('@')[0] || "User"}</p>
-                  <p className="text-xs text-muted-foreground">{user?.email || "user@promptverse.ai"}</p>
+                  <p className="font-semibold text-sm text-sidebar-foreground">{user?.displayName || user?.email?.split('@')[0] || "User"}</p>
+                  <p className="text-xs text-sidebar-foreground/70">{user?.email || "user@promptverse.ai"}</p>
                 </div>
               </Button>
             </DropdownMenuTrigger>
@@ -694,7 +706,7 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
       <SidebarInset>
         <header className="sticky top-0 z-10 flex items-center h-[72px] border-b bg-background px-6 shadow-sm">
           <div className="flex-1">
-            <h2 className="text-2xl font-semibold">
+            <h2 className="text-2xl font-semibold text-foreground">
               {selectedItem ? selectedItem.name : "Dashboard"}
             </h2>
           </div>
@@ -719,7 +731,7 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
                         <DownloadCloud className="mr-2 h-4 w-4" /> Export
                     </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
+                <DropdownMenuContent align="end" className="bg-popover">
                     <DropdownMenuItem onClick={() => handleExport("json")}>
                         Export as JSON
                     </DropdownMenuItem>
@@ -731,7 +743,7 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
             <Button size="sm" onClick={handleOpenNewPromptDialog}>
               <PlusCircle className="mr-2 h-4 w-4" /> New
             </Button>
-             <SidebarTrigger className="md:hidden" />
+             <SidebarTrigger className="md:hidden text-foreground" />
           </div>
         </header>
 
@@ -739,7 +751,7 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
            {selectedItem && selectedItem.type === 'prompt' ? (
             <div className="bg-card p-6 rounded-lg shadow">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-semibold">{selectedItem.name}</h3>
+                <h3 className="text-xl font-semibold text-card-foreground">{selectedItem.name}</h3>
                 <div className="flex gap-2">
                   <Button variant="ghost" size="sm" onClick={() => handleOpenOptimizerDialog((selectedItem as ClientPrompt).content)}><Sparkles className="mr-1 h-4 w-4" /> Optimize</Button>
                   <Button variant="ghost" size="sm" onClick={handleOpenVersionHistory}><History className="mr-1 h-4 w-4" /> Versions ({(selectedItem as ClientPrompt).versions || 0})</Button>
@@ -757,7 +769,7 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
             </div>
           ) : selectedItem && selectedItem.type === 'folder' ? (
             <div className="bg-card p-6 rounded-lg shadow">
-              <h3 className="text-xl font-semibold mb-2">Folder: {selectedItem.name}</h3>
+              <h3 className="text-xl font-semibold mb-2 text-card-foreground">Folder: {selectedItem.name}</h3>
               <p className="text-muted-foreground">Contains {(selectedItem as ClientFolder).children?.length || 0} item(s).</p>
                {/* TODO: Add folder edit/rename functionality here if needed */}
             </div>
@@ -795,7 +807,7 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
           <CommandSeparator />
           <CommandGroup heading="Prompts & Folders">
              {promptTree.flatMap(item => item.type === 'folder' && (item as ClientFolder).children ? (item as ClientFolder).children! : [item] )
-             .filter(Boolean) // Filter out any null/undefined items, though promptTree should not have them
+             .filter(Boolean) 
              .map(item => (
                  <CommandItem key={item.id} onSelect={() => { handleSelectPromptOrFolder(item); setIsSearchOpen(false); }}>
                     {React.createElement(item.icon || (item.type === 'folder' ? FolderIcon : FileText), {className: "mr-2 h-4 w-4"})}
@@ -863,5 +875,3 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
     </SidebarProvider>
   );
 }
-
-    
