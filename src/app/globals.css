@@ -107,14 +107,15 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: var(--font-geist-sans);
+    /* Removed font-family: var(--font-geist-sans); to default to Tailwind's sans-serif (system UI) */
+    /* The --font-inter variable is available on the body but not applied by default to body text */
   }
   h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-geist-sans); /* Or Inter if specifically added */
+    font-family: var(--font-inter); /* Changed from --font-geist-sans */
     font-weight: bold;
   }
   code, pre, .font-code {
-    font-family: var(--font-jetbrains-mono), var(--font-geist-mono), monospace;
+    font-family: var(--font-jetbrains-mono), var(--font-fira-code), monospace; /* Updated to use JetBrains Mono and Fira Code */
   }
 }
 
