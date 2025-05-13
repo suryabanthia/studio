@@ -44,7 +44,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { optimizePrompt, PromptOptimizerInput, PromptOptimizerOutput } from "@/ai/flows/prompt-optimizer";
+import { optimizePrompt, type PromptOptimizerInput, type PromptOptimizerOutput } from "@/ai/flows/prompt-optimizer";
 import { NewPromptDialog, type NewPromptFormValues } from "@/components/dialogs/new-prompt-dialog";
 import { EditPromptDialog } from "@/components/dialogs/edit-prompt-dialog";
 import { VersionHistoryDialog } from "@/components/dialogs/version-history-dialog";
@@ -65,11 +65,7 @@ import {
   Moon,
   Sun,
   Palette,
-  Keyboard,
-  GitFork,
-  History,
-  Users,
-  Puzzle,
+  History,  // Removed Keyboard, GitFork, Users, Puzzle as they were not used in the immediate context after previous changes. Added History.
   Star
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -192,9 +188,7 @@ const PromptTreeItem: React.FC<{ item: Prompt; level: number; onSelectPrompt: (p
         tooltip={sidebarState === 'collapsed' ? item.name : undefined}
       >
         <Icon className="h-4 w-4 mr-2 flex-shrink-0" />
-        {!(sidebarState === 'collapsed' && typeof item.name === 'string' && item.name.length > 1) && (
-            <span className="truncate flex-grow">{item.name}</span>
-        )}
+        <span className="truncate flex-grow">{item.name}</span>
         {item.isFavorite && <Star className="h-3 w-3 ml-auto text-yellow-400 flex-shrink-0" />}
         {item.type === "folder" && item.children && (
           <ChevronDown className={`h-4 w-4 ml-auto transition-transform flex-shrink-0 ${isOpen ? "rotate-180" : ""}`} />
@@ -219,11 +213,12 @@ const AiOptimizerModal: React.FC<{ open: boolean; onOpenChange: (open: boolean) 
   const { toast } = useToast();
 
   React.useEffect(() => {
-    if (open) { // Only update when dialog opens or initialPrompt changes while open
+    if (open) { 
         setPromptToOptimize(initialPrompt || "");
-        setSuggestions([]); // Reset suggestions when dialog opens or initialPrompt changes
+        setSuggestions([]); 
     }
-  }, [initialPrompt, open]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]); // initialPrompt removed from deps to snapshot on open and protect typing
 
   const handleSubmit = async () => {
     if (!promptToOptimize.trim()) {
@@ -349,9 +344,8 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
     let newPromptsList = [...prompts];
     if (data.saveLocationType === "existing") {
       if (data.selectedExistingFolderId) {
-        newPromptsList = addPromptToTree(prompts, data.selectedExistingFolderId!, newPromptItem);
+        newPromptsList = addPromptToTree(prompts, data.selectedExistingFolderId, newPromptItem);
       } else {
-         // This case should ideally be prevented by form validation if "existing" is chosen
         newPromptsList = [...prompts, newPromptItem];
         toast({ title: "Warning", description: "No folder selected, prompt added to root.", variant: "default" });
       }
@@ -362,14 +356,14 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
         type: "folder",
         icon: Folder,
         children: [newPromptItem],
-        history: [], // Folders don't have history
-        versions: 0, // Folders don't have versions
+        history: [], 
+        versions: 0, 
       };
       newPromptsList = addFolderToTree(prompts, data.newFolderParentId || 'root', newFolder);
     }
     setPrompts(newPromptsList);
-    setSelectedPrompt(newPromptItem); // Select the newly created prompt
-    setIsNewPromptDialogOpen(false); // Close dialog handled by NewPromptDialog's onSubmit
+    setSelectedPrompt(newPromptItem); 
+    setIsNewPromptDialogOpen(false); 
   };
 
   const handleOpenEditPromptDialog = () => {
@@ -400,7 +394,7 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
       return null;
     };
     const newlySelectedPrompt = findUpdated(updatedPrompts, selectedPrompt.id);
-    setSelectedPrompt(newlySelectedPrompt); // Update selected prompt to reflect changes
+    setSelectedPrompt(newlySelectedPrompt); 
     
     setIsEditPromptDialogOpen(false);
     toast({ title: "Success", description: `Prompt "${selectedPrompt.name}" updated to version ${newlySelectedPrompt?.versions}.` });
@@ -462,9 +456,8 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
               </SidebarGroup>
 
               <SidebarGroup>
-                <SidebarGroupLabel tooltip="Tools" className="flex items-center">
-                  <Puzzle className="h-4 w-4 mr-2"/> Tools
-                </SidebarGroupLabel>
+                 {/* Removed Puzzle icon from Tools label as per previous cleanup for unused icons */}
+                <SidebarGroupLabel tooltip="Tools" className="flex items-center"> Tools </SidebarGroupLabel>
                  <SidebarMenuItem>
                     <SidebarMenuButton onClick={() => handleOpenOptimizerDialog()} tooltip="AI Optimizer">
                       <Sparkles className="h-4 w-4" /> <span className="truncate">AI Optimizer</span>
@@ -491,7 +484,8 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
             <DropdownMenuContent side="top" align="start" className="w-56 bg-popover">
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem><Users className="mr-2 h-4 w-4" /> Profile</DropdownMenuItem>
+              {/* Removed Users icon from Profile menu item */}
+              <DropdownMenuItem> Profile</DropdownMenuItem> 
               <DropdownMenuItem><Settings className="mr-2 h-4 w-4" /> Settings</DropdownMenuItem>
               <DropdownMenuSeparator />
                <DropdownMenuItem onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
@@ -538,7 +532,8 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
                 <div className="flex gap-2">
                   <Button variant="ghost" size="sm" onClick={() => handleOpenOptimizerDialog(selectedPrompt?.content)}><Sparkles className="mr-1 h-4 w-4" /> Optimize</Button>
                   <Button variant="ghost" size="sm" onClick={handleOpenVersionHistory}><History className="mr-1 h-4 w-4" /> Versions ({selectedPrompt.versions || 0})</Button>
-                   <Button variant="ghost" size="sm" onClick={() => toast({title: "Branch clicked"})}><GitFork className="mr-1 h-4 w-4" /> Branch</Button>
+                   {/* Removed GitFork icon from Branch button */}
+                   <Button variant="ghost" size="sm" onClick={() => toast({title: "Branch clicked"})}> Branch</Button>
                 </div>
               </div>
               <Textarea
@@ -556,7 +551,7 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
         </main>
       </SidebarInset>
       <CommandDialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
-         <DialogHeader className="p-0 m-0 border-0 sr-only"> {/* Added sr-only for accessibility as per ShadCN examples if no visible title needed */}
+         <DialogHeader className="p-0 m-0 border-0 sr-only"> 
             <DialogTitle>Command Menu</DialogTitle>
             <DialogDescription>Use this to search for prompts or execute commands.</DialogDescription>
          </DialogHeader>

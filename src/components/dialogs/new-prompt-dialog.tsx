@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from "react";
@@ -91,27 +90,33 @@ export function NewPromptDialog({ open, onOpenChange, allPrompts, onCreate }: Ne
 
   const saveLocationType = watch("saveLocationType");
 
+  // Memoize options based on allPrompts
   const existingFolderOptions = React.useMemo(() => generateFolderOptions(allPrompts), [allPrompts]);
   const newFolderParentOptions = React.useMemo(() => generateFolderOptions(allPrompts, '', true), [allPrompts]);
 
   const onSubmit = (data: NewPromptFormValues) => {
     onCreate(data);
-    toast({ title: "Success", description: "Prompt created successfully." });
-    reset(); // Reset form after successful submission
-    onOpenChange(false);
+    // Toast and reset are handled by the `useEffect` reacting to `open` state or by parent.
+    // For now, let's keep toast here, but reset is tricky with external open control.
+    // Parent will close dialog via onOpenChange(false) which then triggers reset via useEffect.
   };
-
+  
   React.useEffect(() => {
     if (open) {
-      reset({ // Reset with defaults when dialog opens
+      // Re-calculate options here based on potentially updated allPrompts when dialog opens
+      const currentExistingFolderOptions = generateFolderOptions(allPrompts);
+      const currentNewFolderParentOptions = generateFolderOptions(allPrompts, '', true);
+      reset({ 
         promptName: "",
         promptContent: "",
-        saveLocationType: existingFolderOptions.length > 0 ? "existing" : "new", // Default to 'new' if no folders exist
-        selectedExistingFolderId: existingFolderOptions.length > 0 ? existingFolderOptions[0]?.value : undefined,
-        newFolderParentId: newFolderParentOptions.length > 0 ? newFolderParentOptions[0]?.value : 'root',
+        saveLocationType: currentExistingFolderOptions.length > 0 ? "existing" : "new",
+        selectedExistingFolderId: currentExistingFolderOptions.length > 0 ? currentExistingFolderOptions[0]?.value : undefined,
+        newFolderName: "", // Always clear new folder name
+        newFolderParentId: currentNewFolderParentOptions.length > 0 ? currentNewFolderParentOptions[0]?.value : 'root',
       });
     }
-  }, [open, reset, existingFolderOptions, newFolderParentOptions]);
+  }, [open, reset, allPrompts]); // allPrompts is needed to correctly calculate options on open.
+                                 // If allPrompts changes while open, form won't reset, protecting input.
 
 
   return (
@@ -169,7 +174,7 @@ export function NewPromptDialog({ open, onOpenChange, allPrompts, onCreate }: Ne
                 name="selectedExistingFolderId"
                 control={control}
                 render={({ field }) => (
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value || undefined}>
                     <SelectTrigger className="w-full mt-1 bg-background">
                       <SelectValue placeholder="Select an existing folder" />
                     </SelectTrigger>
@@ -201,7 +206,7 @@ export function NewPromptDialog({ open, onOpenChange, allPrompts, onCreate }: Ne
                     control={control}
                     defaultValue="root" 
                     render={({ field }) => (
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value || 'root'}>
                         <SelectTrigger className="w-full mt-1 bg-background">
                         <SelectValue placeholder="Select parent folder" />
                         </SelectTrigger>
@@ -221,7 +226,7 @@ export function NewPromptDialog({ open, onOpenChange, allPrompts, onCreate }: Ne
           )}
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => { reset(); onOpenChange(false); }}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => { onOpenChange(false); /* Reset is handled by useEffect on 'open' change */ }}>Cancel</Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? "Creating..." : "Create Prompt"}
             </Button>
