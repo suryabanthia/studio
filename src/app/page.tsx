@@ -1,15 +1,19 @@
+
 "use client"; 
 
-import { MainLayoutWrapper, type PageRenderProps } from "@/components/layout/main-layout";
+import type { MainLayoutChildrenProps as PageRenderProps } from "@/components/layout/main-layout";
+import { MainLayoutWrapper } from "@/components/layout/main-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, Sparkles, Star } from "lucide-react";
+import { FileText, Sparkles, Star, BarChart, Palette, BookOpen } from "lucide-react";
 import Image from "next/image";
 import { useToast } from "@/hooks/use-toast"; 
+import { useAuth } from "@/contexts/AuthContext"; // Import useAuth
 
 
 const DashboardContent = ({ openNewPromptDialog, openOptimizerDialog }: PageRenderProps) => {
   const { toast } = useToast();
+  const { user } = useAuth(); // Get user from AuthContext
 
   const handleCreateNewPrompt = () => {
     if (openNewPromptDialog) {
@@ -78,6 +82,7 @@ const DashboardContent = ({ openNewPromptDialog, openOptimizerDialog }: PageRend
         </CardHeader>
         <CardContent>
           <ul className="space-y-2">
+            {/* Placeholder, data to be fetched */}
             <li className="flex justify-between items-center p-2 rounded hover:bg-muted"><span>Ad Copy Generator</span> <Star className="w-4 h-4 text-yellow-400"/></li>
             <li className="flex justify-between items-center p-2 rounded hover:bg-muted"><span>Welcome Email</span></li>
             <li className="flex justify-between items-center p-2 rounded hover:bg-muted"><span>Code Documentation</span></li>
@@ -107,4 +112,6 @@ export default function DashboardPage() {
     <MainLayoutWrapper>
       {/* Pass the DashboardContent component as a render prop child */}
       {(props: PageRenderProps) => <DashboardContent {...props} />}
-    </MainLayoutWrapper
+    </MainLayoutWrapper>
+  );
+}

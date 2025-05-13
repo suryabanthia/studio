@@ -16,6 +16,7 @@ let app: FirebaseApp;
 let auth: Auth;
 let db: Firestore;
 
+// Check if essential Firebase config values are missing or are placeholders
 if (
   !firebaseConfig.apiKey || firebaseConfig.apiKey === "YOUR_FIREBASE_API_KEY" ||
   !firebaseConfig.authDomain || firebaseConfig.authDomain === "YOUR_FIREBASE_AUTH_DOMAIN" ||
@@ -26,19 +27,41 @@ if (
     "Please set NEXT_PUBLIC_FIREBASE_API_KEY, NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, and NEXT_PUBLIC_FIREBASE_PROJECT_ID in your .env file. " +
     "Firebase client-side functionality will be limited or disabled."
   );
-  // Provide dummy initializations or handle appropriately
-  // For now, we'll let it proceed, and parts of the app relying on Firebase will likely fail.
-  // A better approach might be to throw an error or provide a mock implementation if critical.
+  // Even with placeholders, try to initialize. Firebase SDK will handle actual invalid keys.
 }
 
 
 if (!getApps().length) {
-  app = initializeApp(firebaseConfig);
+  try {
+    app = initializeApp(firebaseConfig);
+  } catch (e) {
+    console.error("Failed to initialize Firebase app:", e);
+    // @ts-ignore
+    app = undefined; // Ensure app is undefined if initialization fails
+  }
 } else {
   app = getApp();
 }
 
-auth = getAuth(app);
-db = getFirestore(app);
+// Initialize Auth and Firestore only if app was successfully initialized
+if (app) {
+  try {
+    auth = getAuth(app);
+    db = getFirestore(app);
+  } catch (e) {
+    console.error("Failed to initialize Firebase Auth/Firestore:", e);
+    // @ts-ignore
+    auth = undefined; 
+    // @ts-ignore
+    db = undefined;
+  }
+} else {
+    console.warn("Firebase app object is not available. Auth and Firestore will not be initialized.");
+    // @ts-ignore
+    auth = undefined; 
+    // @ts-ignore
+    db = undefined;
+}
+
 
 export { app, auth, db };

@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -234,4 +235,7 @@ export function NewPromptDialog({
             </Button>
           </DialogFooter>
         </form>
-      </Dialog
+      </DialogContent>
+    </Dialog>
+  );
+}

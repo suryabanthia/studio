@@ -86,3 +86,8 @@ export function EditPromptDialog({
           <Button type="button" onClick={handleSave} disabled={isSaving}>
             {isSaving ? "Saving..." : "Save Changes"}
           </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
