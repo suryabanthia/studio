@@ -219,11 +219,9 @@ const AiOptimizerModal: React.FC<{ open: boolean; onOpenChange: (open: boolean) 
   const { toast } = useToast();
 
   React.useEffect(() => {
-    if (initialPrompt) {
-      setPromptToOptimize(initialPrompt);
-    }
-     if (!open) { // Reset suggestions when dialog closes
-      setSuggestions([]);
+    if (open) { // Only update when dialog opens or initialPrompt changes while open
+        setPromptToOptimize(initialPrompt || "");
+        setSuggestions([]); // Reset suggestions when dialog opens or initialPrompt changes
     }
   }, [initialPrompt, open]);
 
@@ -284,12 +282,17 @@ const AiOptimizerModal: React.FC<{ open: boolean; onOpenChange: (open: boolean) 
   );
 };
 
+interface MainLayoutChildrenProps {
+  openNewPromptDialog: () => void;
+  openOptimizerDialog: (initialPrompt?: string) => void;
+}
 
-export function MainLayout({ children }: { children: React.ReactNode }) {
+export function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) => React.ReactNode }) {
   const [prompts, setPrompts] = React.useState<Prompt[]>(initialMockPrompts);
   const [selectedPrompt, setSelectedPrompt] = React.useState<Prompt | null>(null);
   const [isSearchOpen, setIsSearchOpen] = React.useState(false);
   const [isOptimizerOpen, setIsOptimizerOpen] = React.useState(false);
+  const [optimizerInitialPrompt, setOptimizerInitialPrompt] = React.useState<string | undefined>(undefined);
   const [isNewPromptDialogOpen, setIsNewPromptDialogOpen] = React.useState(false);
   const [isEditPromptDialogOpen, setIsEditPromptDialogOpen] = React.useState(false);
   const [isVersionHistoryDialogOpen, setIsVersionHistoryDialogOpen] = React.useState(false);
@@ -325,6 +328,12 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     setIsNewPromptDialogOpen(true);
   };
 
+  const handleOpenOptimizerDialog = (initialPrompt?: string) => {
+    setOptimizerInitialPrompt(initialPrompt || selectedPrompt?.content || "");
+    setIsOptimizerOpen(true);
+  };
+
+
   const handleCreateNewItem = (data: NewPromptFormValues) => {
     const newPromptItem: Prompt = {
       id: newId(),
@@ -342,6 +351,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       if (data.selectedExistingFolderId) {
         newPromptsList = addPromptToTree(prompts, data.selectedExistingFolderId!, newPromptItem);
       } else {
+         // This case should ideally be prevented by form validation if "existing" is chosen
         newPromptsList = [...prompts, newPromptItem];
         toast({ title: "Warning", description: "No folder selected, prompt added to root.", variant: "default" });
       }
@@ -352,13 +362,14 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         type: "folder",
         icon: Folder,
         children: [newPromptItem],
-        history: [],
-        versions: 0, // Folders don't have versions in this context
+        history: [], // Folders don't have history
+        versions: 0, // Folders don't have versions
       };
       newPromptsList = addFolderToTree(prompts, data.newFolderParentId || 'root', newFolder);
     }
     setPrompts(newPromptsList);
-    setSelectedPrompt(newPromptItem);
+    setSelectedPrompt(newPromptItem); // Select the newly created prompt
+    setIsNewPromptDialogOpen(false); // Close dialog handled by NewPromptDialog's onSubmit
   };
 
   const handleOpenEditPromptDialog = () => {
@@ -378,7 +389,6 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     const updatedPrompts = updatePromptInTree(prompts, selectedPrompt.id, newContent);
     setPrompts(updatedPrompts);
 
-    // Find the updated prompt to set as selectedPrompt to reflect changes in UI
     const findUpdated = (items: Prompt[], id: string): Prompt | null => {
       for (const item of items) {
         if (item.id === id) return item;
@@ -390,7 +400,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       return null;
     };
     const newlySelectedPrompt = findUpdated(updatedPrompts, selectedPrompt.id);
-    setSelectedPrompt(newlySelectedPrompt);
+    setSelectedPrompt(newlySelectedPrompt); // Update selected prompt to reflect changes
     
     setIsEditPromptDialogOpen(false);
     toast({ title: "Success", description: `Prompt "${selectedPrompt.name}" updated to version ${newlySelectedPrompt?.versions}.` });
@@ -456,7 +466,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                   <Puzzle className="h-4 w-4 mr-2"/> Tools
                 </SidebarGroupLabel>
                  <SidebarMenuItem>
-                    <SidebarMenuButton onClick={() => setIsOptimizerOpen(true)} tooltip="AI Optimizer">
+                    <SidebarMenuButton onClick={() => handleOpenOptimizerDialog()} tooltip="AI Optimizer">
                       <Sparkles className="h-4 w-4" /> <span className="truncate">AI Optimizer</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -504,7 +514,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             </h2>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setIsOptimizerOpen(true)}>
+            <Button variant="outline" size="sm" onClick={() => handleOpenOptimizerDialog(selectedPrompt?.content)}>
               <Sparkles className="mr-2 h-4 w-4" /> Optimize
             </Button>
             <Button variant="outline" size="sm" onClick={handleImport}>
@@ -526,13 +536,13 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-xl font-semibold">{selectedPrompt.name}</h3>
                 <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => setIsOptimizerOpen(true)}><Sparkles className="mr-1 h-4 w-4" /> Optimize</Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleOpenOptimizerDialog(selectedPrompt?.content)}><Sparkles className="mr-1 h-4 w-4" /> Optimize</Button>
                   <Button variant="ghost" size="sm" onClick={handleOpenVersionHistory}><History className="mr-1 h-4 w-4" /> Versions ({selectedPrompt.versions || 0})</Button>
                    <Button variant="ghost" size="sm" onClick={() => toast({title: "Branch clicked"})}><GitFork className="mr-1 h-4 w-4" /> Branch</Button>
                 </div>
               </div>
               <Textarea
-                value={selectedPrompt.content}
+                value={selectedPrompt.content ?? ""}
                 readOnly
                 className="w-full min-h-[300px] p-4 font-code text-sm bg-background rounded-md border"
               />
@@ -541,12 +551,12 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           ) : (
-            React.cloneElement(children as React.ReactElement, { openNewPromptDialog: handleOpenNewPromptDialog })
+            children({ openNewPromptDialog: handleOpenNewPromptDialog, openOptimizerDialog: handleOpenOptimizerDialog })
           )}
         </main>
       </SidebarInset>
       <CommandDialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
-         <DialogHeader className="sr-only"> 
+         <DialogHeader className="p-0 m-0 border-0 sr-only"> {/* Added sr-only for accessibility as per ShadCN examples if no visible title needed */}
             <DialogTitle>Command Menu</DialogTitle>
             <DialogDescription>Use this to search for prompts or execute commands.</DialogDescription>
          </DialogHeader>
@@ -562,7 +572,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                 <FileText className="mr-2 h-4 w-4" />
                 <span>Ad Copy Generator</span>
             </CommandItem>
-            <CommandItem onSelect={() => { setIsOptimizerOpen(true); setIsSearchOpen(false); }}>
+            <CommandItem onSelect={() => { handleOpenOptimizerDialog(); setIsSearchOpen(false); }}>
                 <Sparkles className="mr-2 h-4 w-4" />
                 <span>Open AI Optimizer</span>
             </CommandItem>
@@ -582,7 +592,11 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
           </CommandGroup>
         </CommandList>
       </CommandDialog>
-      <AiOptimizerModal open={isOptimizerOpen} onOpenChange={setIsOptimizerOpen} initialPrompt={selectedPrompt?.content}/>
+      <AiOptimizerModal 
+        open={isOptimizerOpen} 
+        onOpenChange={setIsOptimizerOpen} 
+        initialPrompt={optimizerInitialPrompt}
+      />
       <NewPromptDialog 
         open={isNewPromptDialogOpen} 
         onOpenChange={setIsNewPromptDialogOpen}
