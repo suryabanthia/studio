@@ -1,10 +1,10 @@
-
+// src/app/page.tsx
 "use client"; // Making page.tsx a client component to use useToast for demonstration
 
 import { MainLayout } from "@/components/layout/main-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BarChart, FileText, Sparkles, Star } from "lucide-react";
+import { FileText, Sparkles, Star } from "lucide-react";
 import Image from "next/image";
 import { useToast } from "@/hooks/use-toast"; 
 
@@ -94,16 +94,6 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
         
-        <Card className="bg-card shadow-md hover:shadow-lg transition-shadow duration-300">
-          <CardHeader>
-            <CardTitle className="flex items-center text-xl"><BarChart className="w-5 h-5 mr-2 text-accent" /> Usage Stats</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">Total Prompts: <span className="font-semibold text-foreground">125</span></p>
-            <p className="text-muted-foreground">Optimized Today: <span className="font-semibold text-foreground">7</span></p>
-            <p className="text-muted-foreground">Favorite Prompts: <span className="font-semibold text-foreground">12</span></p>
-          </CardContent>
-        </Card>
       </div>
     </MainLayout>
   );
