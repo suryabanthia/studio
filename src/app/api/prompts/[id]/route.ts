@@ -75,11 +75,10 @@ export async function PUT(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const updateData: Partial<FirebasePrompt> & { updatedAt: Timestamp } = {
-        // ...validation.data, // This includes all optional fields
+    const updateData: any = { // Use any for flexibility, or a more specific Partial<FirebasePrompt> & { updatedAt: Timestamp }
         updatedAt: Timestamp.now(),
     };
-    // Only add fields to updateData if they are present in validation.data
+    
     if (validation.data.name !== undefined) updateData.name = validation.data.name;
     if (validation.data.content !== undefined) updateData.content = validation.data.content;
     if (validation.data.folderId !== undefined) updateData.folderId = validation.data.folderId;
@@ -89,26 +88,23 @@ export async function PUT(
 
     // If content is changing, create a new version
     if (validation.data.content && validation.data.content !== currentPromptData.content) {
-        newVersionNumber += 1; // This is the new "current" version number
+        newVersionNumber = (currentPromptData.versions || 0) + 1; 
         updateData.versions = newVersionNumber; 
 
-        // Save current (soon to be old) content as a new version history entry
-        // The version number it *was* is currentPromptData.versions
         const oldVersionData = {
             userId: decodedToken.uid,
-            promptId: promptId, // Link back to the prompt
+            promptId: promptId, 
             versionNumber: currentPromptData.versions, 
             content: currentPromptData.content,
             timestamp: currentPromptData.updatedAt, 
         };
-        // Use currentPromptData.versions as the doc ID for the historical version
         await adminDb.collection('prompts').doc(promptId).collection('versions').doc(String(currentPromptData.versions)).set(oldVersionData);
     }
 
 
     await promptRef.update(updateData);
     
-    const updatedDoc = await promptRef.get(); // Get the updated document
+    const updatedDoc = await promptRef.get();
     const updatedPrompt = { id: updatedDoc.id, ...updatedDoc.data() } as FirebasePrompt;
 
 
@@ -143,8 +139,6 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // Firestore doesn't automatically delete subcollections.
-    // We need to delete all documents in the 'versions' subcollection first.
     const versionsSnapshot = await promptRef.collection('versions').get();
     const batch = adminDb.batch();
     versionsSnapshot.docs.forEach(doc => {
@@ -152,7 +146,6 @@ export async function DELETE(
     });
     await batch.commit();
 
-    // Then delete the prompt document itself
     await promptRef.delete();
 
     return NextResponse.json({ message: 'Prompt and its versions deleted successfully' }, { status: 200 });

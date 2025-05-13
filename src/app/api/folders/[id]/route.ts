@@ -5,10 +5,11 @@ import { z } from 'zod';
 import { Timestamp } from 'firebase-admin/firestore';
 import type { FirebaseFolder } from '@/types/firebase.types';
 
-const updateFolderSchema = z.object({
+export const updateFolderSchema = z.object({
   name: z.string().min(1).optional(),
   parentId: z.string().nullable().optional(),
 });
+export type UpdateFolderPayload = z.infer<typeof updateFolderSchema>;
 
 // GET a specific folder
 export async function GET(
@@ -69,26 +70,20 @@ export async function PUT(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
     
-    // Prevent moving folder into itself or its descendants (complex check, simplified here)
     if (validation.data.parentId === folderId) {
         return NextResponse.json({ error: 'Cannot move a folder into itself.' }, { status: 400 });
     }
 
-
-    const updateData: Partial<FirebaseFolder> & { updatedAt: Timestamp } = {
-        ...validation.data,
+    const updateData: any = { 
         updatedAt: Timestamp.now(),
     };
-    
-    // If parentId is explicitly set to undefined by client, it means no change to parentId.
-    // If parentId is null, it's moving to root.
-    if (validation.data.parentId === undefined) {
-      delete updateData.parentId;
-    }
+     if (validation.data.name !== undefined) updateData.name = validation.data.name;
+     if (validation.data.parentId !== undefined) updateData.parentId = validation.data.parentId;
 
 
     await folderRef.update(updateData);
-    return NextResponse.json({ id: folderId, ...updateData }, { status: 200 });
+    const updatedDoc = await folderRef.get();
+    return NextResponse.json({ id: updatedDoc.id, ...updatedDoc.data() }, { status: 200 });
 
   } catch (error: any) {
     console.error('Error updating folder:', error);
@@ -118,12 +113,15 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // Check if folder has child prompts or folders (simplified check)
-    // A more robust check would query prompts where folderId == folderId and folders where parentId == folderId
-    const childPrompts = await adminDb.collection('prompts').where('userId', '==', decodedToken.uid).where('folderId', '==', folderId).limit(1).get();
-    const childFolders = await adminDb.collection('folders').where('userId', '==', decodedToken.uid).where('parentId', '==', folderId).limit(1).get();
+    const childPromptsQuery = adminDb.collection('prompts').where('userId', '==', decodedToken.uid).where('folderId', '==', folderId).limit(1);
+    const childFoldersQuery = adminDb.collection('folders').where('userId', '==', decodedToken.uid).where('parentId', '==', folderId).limit(1);
 
-    if (!childPrompts.empty || !childFolders.empty) {
+    const [childPromptsSnapshot, childFoldersSnapshot] = await Promise.all([
+      childPromptsQuery.get(),
+      childFoldersQuery.get()
+    ]);
+
+    if (!childPromptsSnapshot.empty || !childFoldersSnapshot.empty) {
       return NextResponse.json({ error: 'Folder is not empty. Delete or move its contents first.' }, { status: 400 });
     }
 

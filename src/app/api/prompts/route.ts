@@ -33,6 +33,9 @@ export async function GET(request: NextRequest) {
       return {
         id: doc.id,
         ...data,
+        // Firestore Timestamps are converted to Date objects on the client if not handled
+        // For direct API response, they might be objects with seconds/nanoseconds
+        // Ensure the FirebasePrompt type matches what's sent.
         createdAt: data.createdAt, 
         updatedAt: data.updatedAt,
       } as FirebasePrompt;
@@ -76,13 +79,11 @@ export async function POST(request: NextRequest) {
     };
 
     await newPromptRef.set(promptData);
-
-    // The "current" content (version 1) is on the prompt document itself.
-    // The 'versions' subcollection stores *previous* versions.
-    // So, for a new prompt, there are no entries in the 'versions' subcollection yet.
-    // Only when the prompt is updated (and its content changes), the *then-current* content
-    // will be moved to the 'versions' subcollection.
     
     return NextResponse.json({ id: newPromptRef.id, ...promptData }, { status: 201 });
 
   } catch (error: any) {
+    console.error('Error creating prompt:', error);
+    return NextResponse.json({ error: 'Failed to create prompt', details: error.message }, { status: 500 });
+  }
+}

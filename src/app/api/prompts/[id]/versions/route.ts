@@ -14,7 +14,6 @@ export async function GET(
   
   const promptId = params.id;
   try {
-    // First, verify the user owns the main prompt document to ensure they can access its versions
     const promptDoc = await adminDb.collection('prompts').doc(promptId).get();
     if (!promptDoc.exists) {
         return NextResponse.json({ error: 'Prompt not found' }, { status: 404 });
@@ -24,16 +23,15 @@ export async function GET(
     }
 
     const versionsSnapshot = await adminDb.collection('prompts').doc(promptId).collection('versions')
-      // .where('userId', '==', decodedToken.uid) // This check is good for security rules, but userId check on parent prompt is primary.
       .orderBy('versionNumber', 'desc')
       .get();
 
     const versions: FirebasePromptVersion[] = versionsSnapshot.docs.map(doc => {
         const data = doc.data();
         return {
-            id: doc.id, // Version document ID (e.g., "1", "2")
+            id: doc.id,
             ...data,
-            timestamp: data.timestamp, // Firestore Timestamp
+            timestamp: data.timestamp,
         } as FirebasePromptVersion;
     });
     

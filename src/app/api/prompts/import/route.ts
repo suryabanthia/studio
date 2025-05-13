@@ -10,7 +10,6 @@ interface ImportedPromptData {
   content: string;
   folderId?: string | null;
   isFavorite?: boolean;
-  // Allow other fields for flexibility, but only these are used
   [key: string]: any;
 }
 
@@ -20,7 +19,6 @@ async function parseJsonFile(file: File): Promise<ImportedPromptData[]> {
   if (!Array.isArray(data)) {
     throw new Error('Invalid JSON format: Expected an array of prompts.');
   }
-  // Basic validation for required fields
   data.forEach((prompt, index) => {
     if (!prompt.name || typeof prompt.name !== 'string' || !prompt.content || typeof prompt.content !== 'string') {
       throw new Error(`Invalid prompt data at index ${index}: 'name' and 'content' are required and must be strings.`);
@@ -37,8 +35,8 @@ async function parseCsvFile(file: File): Promise<ImportedPromptData[]> {
   const header = lines[0].split(',').map(h => h.trim().toLowerCase());
   const nameIndex = header.indexOf('name');
   const contentIndex = header.indexOf('content');
-  const folderIdIndex = header.indexOf('folderid'); // Optional
-  const isFavoriteIndex = header.indexOf('isfavorite'); // Optional
+  const folderIdIndex = header.indexOf('folderid');
+  const isFavoriteIndex = header.indexOf('isfavorite');
 
   if (nameIndex === -1 || contentIndex === -1) {
     throw new Error('CSV file must contain "name" and "content" columns.');
@@ -46,8 +44,8 @@ async function parseCsvFile(file: File): Promise<ImportedPromptData[]> {
 
   const prompts: ImportedPromptData[] = [];
   for (let i = 1; i < lines.length; i++) {
-    if (lines[i].trim() === '') continue; // Skip empty lines
-    const values = lines[i].split(','); // Simple CSV split, may need more robust parser for complex CSVs
+    if (lines[i].trim() === '') continue;
+    const values = lines[i].split(','); 
 
     const name = values[nameIndex]?.trim();
     const content = values[contentIndex]?.trim();
@@ -58,7 +56,6 @@ async function parseCsvFile(file: File): Promise<ImportedPromptData[]> {
     }
     
     const promptData: ImportedPromptData = { name, content };
-
     if (folderIdIndex !== -1 && values[folderIdIndex]?.trim()) {
       promptData.folderId = values[folderIdIndex].trim();
     }

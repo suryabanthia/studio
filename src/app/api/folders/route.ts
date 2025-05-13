@@ -5,10 +5,12 @@ import { z } from 'zod';
 import { Timestamp } from 'firebase-admin/firestore';
 import type { FirebaseFolder } from '@/types/firebase.types';
 
-const createFolderSchema = z.object({
+export const createFolderSchema = z.object({
   name: z.string().min(1, "Folder name is required."),
   parentId: z.string().nullable().optional(), // null for root, or parent folder ID
 });
+
+export type FolderSchemaType = z.infer<typeof createFolderSchema>;
 
 // GET all folders for the authenticated user
 export async function GET(request: NextRequest) {
@@ -20,7 +22,7 @@ export async function GET(request: NextRequest) {
   try {
     const foldersSnapshot = await adminDb.collection('folders')
       .where('userId', '==', decodedToken.uid)
-      .orderBy('name', 'asc') // Or 'createdAt'
+      .orderBy('name', 'asc')
       .get();
     
     const folders: FirebaseFolder[] = foldersSnapshot.docs.map(doc => {

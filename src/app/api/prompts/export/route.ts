@@ -7,11 +7,10 @@ import { Timestamp } from 'firebase-admin/firestore';
 
 
 function promptsToJson(prompts: FirebasePrompt[]): string {
-  // Convert Timestamps to ISO strings for JSON compatibility
   const serializablePrompts = prompts.map(p => ({
     ...p,
-    createdAt: p.createdAt.toDate().toISOString(),
-    updatedAt: p.updatedAt.toDate().toISOString(),
+    createdAt: p.createdAt instanceof Timestamp ? p.createdAt.toDate().toISOString() : p.createdAt,
+    updatedAt: p.updatedAt instanceof Timestamp ? p.updatedAt.toDate().toISOString() : p.updatedAt,
   }));
   return JSON.stringify(serializablePrompts, null, 2);
 }
@@ -23,15 +22,17 @@ function promptsToCsv(prompts: FirebasePrompt[]): string {
   const csvRows = [headers.join(',')];
 
   prompts.forEach(p => {
+    const createdAt = p.createdAt instanceof Timestamp ? p.createdAt.toDate().toISOString() : p.createdAt;
+    const updatedAt = p.updatedAt instanceof Timestamp ? p.updatedAt.toDate().toISOString() : p.updatedAt;
     const row = [
       p.id,
-      `"${p.name.replace(/"/g, '""')}"`, // Escape quotes in name
-      `"${p.content.replace(/"/g, '""').replace(/\n/g, '\\n')}"`, // Escape quotes and newlines in content
+      `"${p.name.replace(/"/g, '""')}"`,
+      `"${p.content.replace(/"/g, '""').replace(/\n/g, '\\n')}"`,
       p.folderId || '',
       p.isFavorite.toString(),
       p.versions.toString(),
-      p.createdAt.toDate().toISOString(),
-      p.updatedAt.toDate().toISOString(),
+      createdAt,
+      updatedAt,
       p.userId,
     ];
     csvRows.push(row.join(','));
@@ -62,12 +63,12 @@ export async function GET(request: NextRequest) {
     
     const prompts: FirebasePrompt[] = promptsSnapshot.docs.map(doc => {
       const data = doc.data();
-      // Ensure Timestamps are correctly typed for conversion functions
       return {
         id: doc.id,
         ...data,
-        createdAt: data.createdAt instanceof Timestamp ? data.createdAt : Timestamp.fromDate(new Date(data.createdAt)),
-        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt : Timestamp.fromDate(new Date(data.updatedAt)),
+        // Ensure Timestamps from Firestore are correctly handled
+        createdAt: data.createdAt, 
+        updatedAt: data.updatedAt,
       } as FirebasePrompt;
     });
 
