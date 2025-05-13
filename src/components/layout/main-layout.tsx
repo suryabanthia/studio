@@ -17,9 +17,11 @@ import {
   SidebarMenuSubButton,
   SidebarGroup,
   SidebarGroupLabel,
-  SidebarInset,
+  // SidebarInset, // Keep this commented if SidebarInset is used from ui/sidebar
   useSidebar,
-} from "@/components/ui/sidebar";
+} from "@/components/ui/sidebar"; // Assuming this is a custom sidebar setup
+import { SidebarInset } from "@/components/ui/sidebar"; // Explicitly import if it's separate
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -45,6 +47,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { optimizePrompt, PromptOptimizerInput, PromptOptimizerOutput } from "@/ai/flows/prompt-optimizer";
+import { NewPromptDialog, type NewPromptFormValues } from "@/components/dialogs/new-prompt-dialog";
+import { newId, addPromptToTree, addFolderToTree } from "@/lib/prompt-utils";
 import {
   Home,
   Settings,
@@ -84,7 +88,7 @@ export interface Prompt {
   content?: string;
 }
 
-const mockPrompts: Prompt[] = [
+const initialMockPrompts: Prompt[] = [
   {
     id: "1",
     name: "Marketing",
@@ -139,7 +143,10 @@ const PromptTreeItem: React.FC<{ item: Prompt; level: number; onSelectPrompt: (p
         tooltip={sidebarState === 'collapsed' ? item.name : undefined}
       >
         <Icon className="h-4 w-4 mr-2 flex-shrink-0" />
-        <span className="truncate flex-grow">{item.name}</span>
+         {/* Ensure children are handled correctly for collapsed state */}
+        {!(sidebarState === 'collapsed' && React.Children.count(item.name) > 1) && (
+            <span className="truncate flex-grow">{item.name}</span>
+        )}
         {item.isFavorite && <Star className="h-3 w-3 ml-auto text-yellow-400 flex-shrink-0" />}
         {item.type === "folder" && item.children && (
           <ChevronDown className={`h-4 w-4 ml-auto transition-transform flex-shrink-0 ${isOpen ? "rotate-180" : ""}`} />
@@ -228,9 +235,11 @@ const AiOptimizerModal: React.FC<{ open: boolean; onOpenChange: (open: boolean) 
 
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
+  const [prompts, setPrompts] = React.useState<Prompt[]>(initialMockPrompts);
   const [selectedPrompt, setSelectedPrompt] = React.useState<Prompt | null>(null);
   const [isSearchOpen, setIsSearchOpen] = React.useState(false);
   const [isOptimizerOpen, setIsOptimizerOpen] = React.useState(false);
+  const [isNewPromptDialogOpen, setIsNewPromptDialogOpen] = React.useState(false);
   const { setTheme, theme } = useTheme();
   const { toast } = useToast();
 
@@ -256,11 +265,43 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   const handleExport = () => {
     toast({ title: "Export", description: "Export functionality not yet implemented." });
   };
-
-  const handleNewPrompt = () => {
-    toast({ title: "Action: New Prompt", description: "This button is now clickable." });
-    // TODO: Implement actual new prompt functionality
+  
+  const handleOpenNewPromptDialog = () => {
+    setIsNewPromptDialogOpen(true);
   };
+
+  const handleCreateNewItem = (data: NewPromptFormValues) => {
+    const newPromptItem: Prompt = {
+      id: newId(),
+      name: data.promptName,
+      content: data.promptContent,
+      type: "prompt",
+      icon: FileText,
+      versions: 1,
+      isFavorite: false,
+    };
+
+    if (data.saveLocationType === "existing") {
+      if (data.selectedExistingFolderId) {
+        setPrompts(prev => addPromptToTree(prev, data.selectedExistingFolderId!, newPromptItem));
+      } else {
+         // Should not happen if validation is correct, but as a fallback add to root
+        setPrompts(prev => [...prev, newPromptItem]);
+        toast({ title: "Warning", description: "No folder selected, prompt added to root.", variant: "default" });
+      }
+    } else if (data.saveLocationType === "new") {
+      const newFolder: Prompt = {
+        id: newId(),
+        name: data.newFolderName!,
+        type: "folder",
+        icon: Folder,
+        children: [newPromptItem],
+      };
+      setPrompts(prev => addFolderToTree(prev, data.newFolderParentId || 'root', newFolder));
+    }
+    setSelectedPrompt(newPromptItem); // Optionally select the newly created prompt
+  };
+
 
   const handleEditPrompt = () => {
     toast({ title: "Action: Edit Prompt", description: "This button is now clickable." });
@@ -309,7 +350,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                 <SidebarGroupLabel tooltip="Prompts" className="flex items-center">
                   <BookOpen className="h-4 w-4 mr-2"/> Prompts
                 </SidebarGroupLabel>
-                 {mockPrompts.map((item) => (
+                 {prompts.map((item) => (
                   <PromptTreeItem key={item.id} item={item} level={0} onSelectPrompt={handleSelectPrompt} selectedPromptId={selectedPrompt?.id}/>
                 ))}
               </SidebarGroup>
@@ -341,7 +382,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                 </div>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent side="top" align="start" className="w-56">
+            <DropdownMenuContent side="top" align="start" className="w-56 bg-popover">
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem><Users className="mr-2 h-4 w-4" /> Profile</DropdownMenuItem>
@@ -377,7 +418,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             <Button variant="outline" size="sm" onClick={handleExport}>
               <DownloadCloud className="mr-2 h-4 w-4" /> Export
             </Button>
-            <Button size="sm" onClick={handleNewPrompt}>
+            <Button size="sm" onClick={handleOpenNewPromptDialog}>
               <PlusCircle className="mr-2 h-4 w-4" /> New Prompt
             </Button>
              <SidebarTrigger className="md:hidden" />
@@ -405,16 +446,23 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           ) : (
-            children
+            React.cloneElement(children as React.ReactElement, { openNewPromptDialog: handleOpenNewPromptDialog })
           )}
         </main>
       </SidebarInset>
       <CommandDialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
+         <DialogHeader className="sr-only"> 
+            <DialogTitle>Command Menu</DialogTitle>
+         </DialogHeader>
         <CommandInput placeholder="Type a command or search..." />
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
           <CommandGroup heading="Suggestions">
-            <CommandItem onSelect={() => { setSelectedPrompt(mockPrompts[0].children![0] as Prompt); setIsSearchOpen(false); }}>
+            <CommandItem onSelect={() => { 
+                const adCopyPrompt = prompts.flatMap(p => p.type === 'folder' && p.children ? p.children.filter(c => c.id === '1-1') : []).flat()[0];
+                if(adCopyPrompt) setSelectedPrompt(adCopyPrompt); 
+                setIsSearchOpen(false); 
+            }}>
                 <FileText className="mr-2 h-4 w-4" />
                 <span>Ad Copy Generator</span>
             </CommandItem>
@@ -422,10 +470,14 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                 <Sparkles className="mr-2 h-4 w-4" />
                 <span>Open AI Optimizer</span>
             </CommandItem>
+             <CommandItem onSelect={() => { handleOpenNewPromptDialog(); setIsSearchOpen(false); }}>
+                <PlusCircle className="mr-2 h-4 w-4" />
+                <span>Create New Prompt</span>
+            </CommandItem>
           </CommandGroup>
           <CommandSeparator />
           <CommandGroup heading="Prompts">
-             {mockPrompts.flatMap(p => p.type === 'folder' && p.children ? p.children.filter(c => c.type === 'prompt') : (p.type === 'prompt' ? [p] : [])).map(prompt => (
+             {prompts.flatMap(p => p.type === 'folder' && p.children ? p.children.filter(c => c.type === 'prompt') : (p.type === 'prompt' ? [p] : [])).map(prompt => (
                  prompt && <CommandItem key={prompt.id} onSelect={() => { handleSelectPrompt(prompt); setIsSearchOpen(false); }}>
                     {React.createElement(prompt.icon || FileText, {className: "mr-2 h-4 w-4"})}
                     <span>{prompt.name}</span>
@@ -435,7 +487,12 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         </CommandList>
       </CommandDialog>
       <AiOptimizerModal open={isOptimizerOpen} onOpenChange={setIsOptimizerOpen} initialPrompt={selectedPrompt?.content}/>
+      <NewPromptDialog 
+        open={isNewPromptDialogOpen} 
+        onOpenChange={setIsNewPromptDialogOpen}
+        allPrompts={prompts}
+        onCreate={handleCreateNewItem}
+      />
     </SidebarProvider>
   );
 }
-

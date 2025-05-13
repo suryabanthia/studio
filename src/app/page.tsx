@@ -1,19 +1,27 @@
-// src/app/page.tsx
-"use client"; // Making page.tsx a client component to use useToast for demonstration
+
+"use client"; 
 
 import { MainLayout } from "@/components/layout/main-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, Sparkles, Star } from "lucide-react";
+import { FileText, Sparkles, Star, BarChart } from "lucide-react";
 import Image from "next/image";
 import { useToast } from "@/hooks/use-toast"; 
 
-export default function DashboardPage() {
+interface DashboardPageProps {
+  openNewPromptDialog?: () => void;
+}
+
+export default function DashboardPage({ openNewPromptDialog }: DashboardPageProps) {
   const { toast } = useToast();
 
   const handleCreateNewPrompt = () => {
-    toast({ title: "Action: Create New Prompt", description: "This button is now clickable." });
-    // TODO: Implement actual functionality
+    if (openNewPromptDialog) {
+      openNewPromptDialog();
+    } else {
+      // Fallback or error if the function isn't passed
+      toast({ title: "Error", description: "Cannot open new prompt dialog.", variant: "destructive" });
+    }
   };
 
   const handleExploreFeatures = () => {
