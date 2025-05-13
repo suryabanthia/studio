@@ -85,7 +85,9 @@ const SidebarProvider = React.forwardRef<
         }
 
         // This sets the cookie to keep the sidebar state.
-        document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+        if (typeof document !== 'undefined') {
+          document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+        }
       },
       [setOpenProp, open]
     )
@@ -93,8 +95,8 @@ const SidebarProvider = React.forwardRef<
     // Helper to toggle the sidebar.
     const toggleSidebar = React.useCallback(() => {
       return isMobile
-        ? setOpenMobile((open) => !open)
-        : setOpen((open) => !open)
+        ? setOpenMobile((openMobileState) => !openMobileState)
+        : setOpen((openState) => !openState)
     }, [isMobile, setOpen, setOpenMobile])
 
     // Adds a keyboard shortcut to toggle the sidebar.
@@ -576,7 +578,7 @@ const SidebarMenuButton = React.forwardRef<
       size = "default",
       tooltip,
       className,
-      children, // Added children to pass through to Comp
+      children, 
       ...props
     },
     ref
@@ -584,14 +586,9 @@ const SidebarMenuButton = React.forwardRef<
     const Comp = asChild ? Slot : "button"
     const { isMobile, state } = useSidebar()
 
-    const buttonContent = (
-      <>
-        {/* For icon mode, only show the icon if it's the first child. Otherwise, hide text. */}
-        {state === 'collapsed' && !isMobile && React.Children.toArray(children).length > 1 ? 
-          React.Children.toArray(children)[0] : children
-        }
-      </>
-    );
+    const effectiveChildren = (state === 'collapsed' && !isMobile && React.Children.toArray(children).length > 1) 
+      ? React.Children.toArray(children)[0] 
+      : children;
     
     const button = (
       <Comp
@@ -602,7 +599,7 @@ const SidebarMenuButton = React.forwardRef<
         className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
         {...props}
       >
-        {buttonContent}
+        {effectiveChildren}
       </Comp>
     )
 
