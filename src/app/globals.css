@@ -4,100 +4,101 @@
 
 @layer base {
   :root {
-    /* Light Mode - Overrides will be in .light class if dark is default */
-    --background: 0 0% 100%; /* #FFFFFF */
-    --foreground: 222 47% 11%; /* #0F172A */
+    /* Light Mode - Inspired by Sunset Palette but lighter */
+    --background: 210 30% 98%; /* Very light blue-gray: #F8FAFC */
+    --foreground: 210 29% 24%; /* Dark slate blue text: #2C3E50 */
 
-    --card: 210 40% 98%; /* #F8FAFC */
-    --card-foreground: 222 47% 11%; /* #0F172A */
+    --card: 0 0% 100%; /* White */
+    --card-foreground: 210 29% 24%; /* Dark slate blue text */
 
-    --popover: 210 40% 98%; /* #F8FAFC */
-    --popover-foreground: 222 47% 11%; /* #0F172A */
+    --popover: 0 0% 100%; /* White */
+    --popover-foreground: 210 29% 24%; /* Dark slate blue text */
 
-    --primary: 258 51% 52%; /* #6B46C1 */
-    --primary-foreground: 0 0% 100%; /* #FFFFFF */
+    --primary: 208 41% 45%; /* Lighter Blue: #4A7BA8 */
+    --primary-foreground: 0 0% 100%; /* White */
 
-    --secondary: 215 28% 95%; /* #F1F5F9 */
-    --secondary-foreground: 222 47% 11%; /* #0F172A */
+    --secondary: 287 16% 52%; /* Lighter Purple: #897891 */
+    --secondary-foreground: 0 0% 100%; /* White */
 
-    --muted: 215 28% 95%; /* #F1F5F9 */
-    --muted-foreground: 215 19% 47%; /* #64748B */
+    --muted: 210 25% 90%; /* Light grayish blue: #E0E7EF */
+    --muted-foreground: 210 25% 55%; /* Darker muted text: #7889A1 */
 
-    --accent: 16 100% 66%; /* #FF7F50 Orange */
-    --accent-foreground: 0 0% 100%; /* #FFFFFF */
+    --accent: 354 100% 65%; /* Lighter Coral: #FF6372 */
+    --accent-foreground: 0 0% 100%; /* White */
 
     --destructive: 0 84.2% 60.2%; /* Default shadcn destructive */
     --destructive-foreground: 0 0% 98%; /* Default shadcn destructive-foreground */
     
-    --border: 215 20% 90%; /* #E2E8F0 */
-    --input: 215 20% 90%; /* #E2E8F0 */
-    --ring: 258 51% 52%; /* #6B46C1 For focus rings */
+    --border: 210 20% 85%; /* Light gray-blue border: #CBD5E1 */
+    --input: 210 20% 85%; /* Light gray-blue input border */
+    --ring: 208 41% 45%; /* Primary color for focus rings */
 
     --radius: 0.5rem;
 
     /* Chart Colors - Light */
-    --chart-1: 258 51% 52%; /* Primary */
-    --chart-2: 16 100% 66%; /* Accent */
-    --chart-3: 172 81% 39%; /* Teal Success */
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+    --chart-1: 208 41% 45%; /* Primary */
+    --chart-2: 354 100% 65%; /* Accent */
+    --chart-3: 287 16% 52%; /* Secondary */
+    --chart-4: 340 42% 70%; /* Lighter Pink: #D98FAA */
+    --chart-5: 208 41% 65%; /* Even Lighter Blue */
 
     /* Sidebar Colors - Light */
-    --sidebar-background: 210 40% 98%; /* #F8FAFC */
-    --sidebar-foreground: 222 47% 11%; /* #0F172A */
-    --sidebar-primary: 258 51% 52%; /* #6B46C1 */
-    --sidebar-primary-foreground: 0 0% 100%; /* #FFFFFF */
-    --sidebar-accent: 215 28% 90%; /* #E2E8F0 */
-    --sidebar-accent-foreground: 222 47% 11%; /* #0F172A */
-    --sidebar-border: 215 20% 85%; /* #CBD5E1 */
-    --sidebar-ring: 258 51% 52%; /* #6B46C1 */
+    --sidebar-background: 210 30% 96%; /* Off-white/light blue: #F0F4F8 */
+    --sidebar-foreground: 210 29% 24%; /* Dark slate blue text */
+    --sidebar-primary: 208 41% 45%; /* Active item uses light primary */
+    --sidebar-primary-foreground: 0 0% 100%; /* White */
+    --sidebar-accent: 210 20% 90%; /* Hover items: #E2E8F0 */
+    --sidebar-accent-foreground: 210 29% 24%; /* Dark text on hover */
+    --sidebar-border: 210 20% 80%; /* #BCCCDC */
+    --sidebar-ring: 208 41% 45%; /* Primary color for focus rings */
   }
 
   .dark {
-    --background: 222 47% 11%; /* #0F172A */
-    --foreground: 215 28% 95%; /* #F1F5F9 */
+    /* Dark Mode - Based on "Sunset" Palette */
+    --background: 210 29% 24%; /* Dark Slate Blue: #2C3E50 (Image BG) */
+    --foreground: 210 25% 92%; /* Off-white text */
 
-    --card: 215 39% 17%; /* #1E293B */
-    --card-foreground: 215 28% 95%; /* #F1F5F9 */
+    --card: 210 29% 28%; /* Slightly lighter than background: #34495E */
+    --card-foreground: 210 25% 92%; /* Off-white text */
 
-    --popover: 215 39% 17%; /* #1E293B */
-    --popover-foreground: 215 28% 95%; /* #F1F5F9 */
+    --popover: 210 29% 20%; /* Slightly darker than background: #233546 */
+    --popover-foreground: 210 25% 92%; /* Off-white text */
 
-    --primary: 258 51% 52%; /* #6B46C1 */
-    --primary-foreground: 215 28% 95%; /* #F1F5F9 */
+    --primary: 208 41% 35%; /* Dark Blue from palette: #355C7D */
+    --primary-foreground: 0 0% 100%; /* White */
 
-    --secondary: 215 28% 21%; /* #293548 */
-    --secondary-foreground: 215 28% 95%; /* #F1F5F9 */
+    --secondary: 287 16% 42%; /* Muted Purple from palette: #725A7A */
+    --secondary-foreground: 0 0% 100%; /* White */
 
-    --muted: 215 30% 25%; /* #334155 */
-    --muted-foreground: 215 20% 65%; /* #A0AEC0 */
+    --muted: 210 25% 40%; /* Muted gray-blue: #526373 */
+    --muted-foreground: 210 20% 70%; /* Light gray text: #A8B3BF */
 
-    --accent: 16 100% 66%; /* #FF7F50 Orange */
-    --accent-foreground: 222 47% 11%; /* #0F172A */
+    --accent: 354 100% 73%; /* Coral Pink from palette: #FF7582 */
+    --accent-foreground: 210 29% 15%; /* Dark text on accent: e.g. #1C2A3A */
     
-    --destructive: 0 62.8% 30.6%; /* Default shadcn dark destructive */
-    --destructive-foreground: 0 0% 98%; /* Default shadcn dark destructive-foreground */
+    --destructive: 0 72% 51%; /* Bright Red */
+    --destructive-foreground: 0 0% 98%; /* Light text on destructive */
 
-    --border: 215 28% 27%; /* #334155 */
-    --input: 215 28% 27%; /* #334155 */
-    --ring: 258 51% 52%; /* #6B46C1 For focus rings */
+    --border: 210 29% 32%; /* Subtle border: #3E566F */
+    --input: 210 29% 32%; /* Input border */
+    --ring: 354 100% 73%; /* Accent color for focus rings */
     
     /* Chart Colors - Dark */
-    --chart-1: 258 51% 52%; /* Primary */
-    --chart-2: 16 100% 66%; /* Accent */
-    --chart-3: 172 81% 39%; /* Teal Success */
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    --chart-1: 208 41% 35%; /* Blue: #355C7D */
+    --chart-2: 354 100% 73%; /* Coral: #FF7582 */
+    --chart-3: 287 16% 42%; /* Purple: #725A7A */
+    --chart-4: 340 42% 60%; /* Pink: #C56C86 */
+    --chart-5: 208 41% 55%; /* Lighter Blue */
 
     /* Sidebar Colors - Dark */
-    --sidebar-background: 222 47% 9%; /* Slightly darker than main bg: #0C1423 */
-    --sidebar-foreground: 215 28% 95%; /* #F1F5F9 */
-    --sidebar-primary: 258 51% 52%; /* #6B46C1 */
-    --sidebar-primary-foreground: 215 28% 95%; /* #F1F5F9 */
-    --sidebar-accent: 215 39% 20%; /* #2A3B51 */
-    --sidebar-accent-foreground: 215 28% 95%; /* #F1F5F9 */
-    --sidebar-border: 215 28% 22%; /* #2a3b50 */
-    --sidebar-ring: 258 51% 52%; /* #6B46C1 */
+    --sidebar-background: 210 29% 20%; /* Darker than main bg: #233546 */
+    --sidebar-foreground: 210 20% 88%; /* Light gray text */
+    --sidebar-primary: 354 100% 73%; /* Active item uses accent: #FF7582 */
+    --sidebar-primary-foreground: 210 29% 15%; /* Dark text on active item */
+    --sidebar-accent: 210 29% 26%; /* Hover/selected items: #2F4254 */
+    --sidebar-accent-foreground: 210 20% 95%; /* Bright text on hover */
+    --sidebar-border: 210 29% 28%; /* Subtle border: #34495E */
+    --sidebar-ring: 354 100% 73%; /* Accent for focus rings */
   }
 }
 
