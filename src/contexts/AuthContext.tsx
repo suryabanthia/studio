@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { User as FirebaseUser, AuthError as FirebaseAuthError } from 'firebase/auth';
@@ -15,7 +16,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 type AuthContextType = {
   user: FirebaseUser | null;
   isLoading: boolean;
-  error: FirebaseAuthError | Error | null; // Allow generic Error for API call issues
+  error: FirebaseAuthError | Error | null; 
   signIn: (credentials: { email: string, password: string }) => Promise<{ user: FirebaseUser | null; error: FirebaseAuthError | Error | null }>;
   signUp: (credentials: { email: string, password: string }) => Promise<{ user: FirebaseUser | null; error: FirebaseAuthError | Error | null }>;
   signOut: () => Promise<{ error: FirebaseAuthError | Error | null }>;
@@ -23,7 +24,7 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const publicPaths = ['/about', '/pricing']; // Add any other public paths
+const publicPaths = ['/about', '/pricing']; 
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -33,11 +34,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!firebaseAuth.app) { // Check if Firebase app is initialized
-        console.warn("Firebase app is not initialized. Auth functionality will be disabled.");
+    // Check if firebaseAuth itself is available (might be undefined if firebase.ts threw an error during init)
+    if (!firebaseAuth) {
+        const initError = new Error(
+          "Firebase Auth service is not available. " +
+          "This is likely due to an earlier Firebase initialization error. " +
+          "Please check console logs for details from 'src/lib/firebase/firebase.ts' " +
+          "and ensure your Firebase project configuration (API key, authDomain, etc.) is correct and a Firebase App is initialized."
+        );
+        console.error(initError.message);
+        setError(initError);
         setIsLoading(false);
         setUser(null);
-        setError(new Error("Firebase not configured."));
         return;
     }
 
@@ -59,9 +67,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [pathname, router]);
 
   useEffect(() => {
-     if (!firebaseAuth.app && !isLoading) {
+    if (!firebaseAuth && !isLoading) { // Check if firebaseAuth is defined
         if (!publicPaths.includes(pathname) && pathname !== '/login' && pathname !== '/signup') {
-            console.warn("Attempting to access a private page while Firebase is not configured.");
+            // Error already set in the first useEffect if firebaseAuth is not available
         }
         return;
     }
@@ -74,26 +82,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 
   const signIn = async ({ email, password }: { email: string, password: string }) => {
-    if (!firebaseAuth.app) {
-      const err = new Error("Firebase not configured.");
+    if (!firebaseAuth) { // Check if firebaseAuth is defined
+      const err = new Error("Firebase Auth service not available. Cannot sign in.");
       setError(err);
       return { user: null, error: err };
     }
     setIsLoading(true);
     setError(null);
     try {
-      // Call client-side sign in first to get user object and ID token
       const userCredential = await signInWithEmailAndPassword(firebaseAuth, email, password);
-      
-      // Optionally: Call backend /api/auth/login to establish a session cookie if needed
-      // For this example, we'll rely on Firebase's client-side session management.
-      // const response = await fetch('/api/auth/login', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ idToken: await userCredential.user.getIdToken() }),
-      // });
-      // if (!response.ok) throw new Error(await response.text());
-
       setIsLoading(false);
       return { user: userCredential.user, error: null };
     } catch (signInError: any) {
@@ -104,8 +101,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const signUp = async ({ email, password }: { email: string, password: string }) => {
-     if (!firebaseAuth.app) {
-      const err = new Error("Firebase not configured.");
+     if (!firebaseAuth) { // Check if firebaseAuth is defined
+      const err = new Error("Firebase Auth service not available. Cannot sign up.");
       setError(err);
       return { user: null, error: err };
     }
@@ -113,21 +110,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
     try {
       const userCredential = await createUserWithEmailAndPassword(firebaseAuth, email, password);
-      // Optionally: Call backend /api/auth/signup to create user record in your DB if needed
-      // const response = await fetch('/api/auth/signup', { /* ... */ });
-      // if (!response.ok) throw new Error(await response.text());
       setIsLoading(false);
       return { user: userCredential.user, error: null };
     } catch (signUpError: any) {
       setIsLoading(false);
-      setError(signUpError as FirebaseAuthError);
+      setError(signUpError as FirebaseAuthError); // Set the error state
       return { user: null, error: signUpError as FirebaseAuthError };
     }
   };
 
   const signOut = async () => {
-    if (!firebaseAuth.app) {
-      const err = new Error("Firebase not configured.");
+    if (!firebaseAuth) { // Check if firebaseAuth is defined
+      const err = new Error("Firebase Auth service not available. Cannot sign out.");
       setError(err);
       setUser(null);
       return { error: err };
@@ -136,8 +130,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
     try {
       await firebaseSignOut(firebaseAuth);
-      // Optionally: Call backend /api/auth/logout to clear session cookie
-      // await fetch('/api/auth/logout', { method: 'POST' });
       setIsLoading(false);
       setUser(null);
       router.push('/login');
@@ -160,9 +152,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   
   const isPublicPage = publicPaths.includes(pathname);
 
-  if (isLoading && !user && !isPublicPage && pathname !== '/login' && pathname !== '/signup' && firebaseAuth.app) {
+  // Display loading spinner if auth state is loading and it's not a public page or auth page
+  // And if firebaseAuth is defined (meaning firebase.ts didn't throw an initial config error)
+  if (isLoading && !user && !isPublicPage && pathname !== '/login' && pathname !== '/signup' && firebaseAuth) {
      return <div className="flex h-screen w-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
   }
+  
+  // If there's a general error (like Firebase not configured from firebase.ts via firebaseAuth being undefined, or auth/configuration-not-found)
+  // and it's not an auth page (to prevent error loops on login/signup if they are the source of issues)
+  // For now, this specific error display on all pages might be too aggressive.
+  // The login/signup pages will display their specific errors.
+  // This top-level error display might be better suited for a general "Something went wrong" banner.
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
@@ -174,3 +174,4 @@ export const useAuth = () => {
   }
   return context;
 };
+
