@@ -12,6 +12,9 @@ const createPromptSchema = z.object({
   isFavorite: z.boolean().optional().default(false),
 });
 
+export type PromptSchemaType = z.infer<typeof createPromptSchema>;
+
+
 // GET all prompts for the authenticated user
 export async function GET(request: NextRequest) {
   const decodedToken = await verifyIdToken(request);
@@ -30,8 +33,7 @@ export async function GET(request: NextRequest) {
       return {
         id: doc.id,
         ...data,
-        // Ensure Timestamps are correctly handled if needed for client (usually fine)
-        createdAt: data.createdAt, // Firestore Timestamps are fine
+        createdAt: data.createdAt, 
         updatedAt: data.updatedAt,
       } as FirebasePrompt;
     });
@@ -69,25 +71,18 @@ export async function POST(request: NextRequest) {
       folderId: folderId || null,
       createdAt: now,
       updatedAt: now,
-      versions: 1,
+      versions: 1, // Initial version number is 1
       isFavorite: isFavorite || false,
     };
 
     await newPromptRef.set(promptData);
 
-    // Create initial version in subcollection 'versions'
-    const initialVersionData = {
-      userId: decodedToken.uid,
-      versionNumber: 1,
-      content: content,
-      timestamp: now,
-    };
-    await newPromptRef.collection('versions').doc(String(1)).set(initialVersionData);
+    // The "current" content (version 1) is on the prompt document itself.
+    // The 'versions' subcollection stores *previous* versions.
+    // So, for a new prompt, there are no entries in the 'versions' subcollection yet.
+    // Only when the prompt is updated (and its content changes), the *then-current* content
+    // will be moved to the 'versions' subcollection.
     
     return NextResponse.json({ id: newPromptRef.id, ...promptData }, { status: 201 });
 
   } catch (error: any) {
-    console.error('Error creating prompt:', error);
-    return NextResponse.json({ error: 'Failed to create prompt', details: error.message }, { status: 500 });
-  }
-}

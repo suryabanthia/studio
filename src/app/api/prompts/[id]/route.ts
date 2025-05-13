@@ -12,6 +12,8 @@ const updatePromptSchema = z.object({
   isFavorite: z.boolean().optional(),
 });
 
+export type UpdatePromptPayload = z.infer<typeof updatePromptSchema>;
+
 // GET a specific prompt
 export async function GET(
   request: NextRequest,
@@ -74,39 +76,43 @@ export async function PUT(
     }
 
     const updateData: Partial<FirebasePrompt> & { updatedAt: Timestamp } = {
-        ...validation.data,
+        // ...validation.data, // This includes all optional fields
         updatedAt: Timestamp.now(),
     };
+    // Only add fields to updateData if they are present in validation.data
+    if (validation.data.name !== undefined) updateData.name = validation.data.name;
+    if (validation.data.content !== undefined) updateData.content = validation.data.content;
+    if (validation.data.folderId !== undefined) updateData.folderId = validation.data.folderId;
+    if (validation.data.isFavorite !== undefined) updateData.isFavorite = validation.data.isFavorite;
     
     let newVersionNumber = currentPromptData.versions;
 
     // If content is changing, create a new version
     if (validation.data.content && validation.data.content !== currentPromptData.content) {
-        newVersionNumber += 1;
-        updateData.versions = newVersionNumber; // Update total versions count on the prompt
+        newVersionNumber += 1; // This is the new "current" version number
+        updateData.versions = newVersionNumber; 
 
-        // Save current content as a new version history entry
+        // Save current (soon to be old) content as a new version history entry
+        // The version number it *was* is currentPromptData.versions
         const oldVersionData = {
             userId: decodedToken.uid,
-            versionNumber: currentPromptData.versions, // The version number it *was*
+            promptId: promptId, // Link back to the prompt
+            versionNumber: currentPromptData.versions, 
             content: currentPromptData.content,
-            timestamp: currentPromptData.updatedAt, // When this version was last "current"
+            timestamp: currentPromptData.updatedAt, 
         };
-        await promptRef.collection('versions').doc(String(currentPromptData.versions)).set(oldVersionData);
-        
-        // Update the prompt with new content and incremented version number
-        // The new content will itself be implicitly version newVersionNumber (currentPromptData.versions + 1)
+        // Use currentPromptData.versions as the doc ID for the historical version
+        await adminDb.collection('prompts').doc(promptId).collection('versions').doc(String(currentPromptData.versions)).set(oldVersionData);
     }
 
 
     await promptRef.update(updateData);
     
-    // If content changed, the new "current" content forms the latest version, but isn't explicitly stored in 'versions' collection until it's superseded.
-    // The 'versions' field on the prompt tracks the highest version number *that is now in history*.
-    // So, if content changed, versions becomes N+1. The content for V(N+1) is prompt.content. V(N) is now in history.
+    const updatedDoc = await promptRef.get(); // Get the updated document
+    const updatedPrompt = { id: updatedDoc.id, ...updatedDoc.data() } as FirebasePrompt;
 
 
-    return NextResponse.json({ id: promptId, ...updateData }, { status: 200 });
+    return NextResponse.json(updatedPrompt, { status: 200 });
 
   } catch (error: any) {
     console.error('Error updating prompt:', error);
@@ -155,39 +161,3 @@ export async function DELETE(
     return NextResponse.json({ error: 'Failed to delete prompt', details: error.message }, { status: 500 });
   }
 }
-
-// GET versions for a specific prompt
-export async function GET_VERSIONS( // Custom method name, Next.js doesn't map this directly. Need to call from GET or separate route.
-  request: NextRequest,
-  { params }: { params: { id: string } } // promptId
-) {
-  const decodedToken = await verifyIdToken(request);
-  if (!decodedToken) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  
-  const promptId = params.id;
-  try {
-    // First, verify the user owns the main prompt document
-    const promptDoc = await adminDb.collection('prompts').doc(promptId).get();
-    if (!promptDoc.exists || promptDoc.data()?.userId !== decodedToken.uid) {
-      return NextResponse.json({ error: 'Prompt not found or unauthorized' }, { status: 404 });
-    }
-
-    const versionsSnapshot = await adminDb.collection('prompts').doc(promptId).collection('versions')
-      .where('userId', '==', decodedToken.uid) // Redundant if parent check is done, but good for direct subcollection query rules
-      .orderBy('versionNumber', 'desc')
-      .get();
-
-    const versions = versionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    return NextResponse.json(versions, { status: 200 });
-  } catch (error) {
-    console.error(`Error fetching versions for prompt ${promptId}:`, error);
-    return NextResponse.json({ error: 'Failed to fetch prompt versions' }, { status: 500 });
-  }
-}
-
-// You might want a specific route for versions, e.g., /api/prompts/[id]/versions
-// For now, I'm adding it as a conceptual GET_VERSIONS function.
-// To use it, you'd need to modify the GET handler to check for a query param like `?versions=true`
-// or create a new route file: src/app/api/prompts/[id]/versions/route.ts
