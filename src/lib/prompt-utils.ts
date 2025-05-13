@@ -1,5 +1,4 @@
-
-import type { Prompt } from '@/components/layout/main-layout';
+import type { Prompt, PromptVersion } from '@/components/layout/main-layout';
 
 export const newId = () => `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
@@ -12,7 +11,7 @@ export function generateFolderOptions(
   items: Prompt[],
   prefix = '',
   includeRootOption = false,
-  promptIdToExclude?: string // Used when choosing a parent for a new folder, to avoid self-parenting if we were moving items
+  promptIdToExclude?: string
 ): FolderOption[] {
   let options: FolderOption[] = [];
   if (includeRootOption) {
@@ -76,6 +75,36 @@ export function addFolderToTree(
       return {
         ...item,
         children: addFolderToTree(item.children, parentId, folderToAdd),
+      };
+    }
+    return item;
+  });
+}
+
+export function updatePromptInTree(
+  items: Prompt[],
+  targetId: string,
+  newContent: string
+): Prompt[] {
+  return items.map(item => {
+    if (item.id === targetId && item.type === 'prompt' && item.content !== undefined) {
+      const previousVersionNumber = item.versions || 1; 
+      const newHistoryEntry: PromptVersion = {
+        versionNumber: previousVersionNumber,
+        content: item.content, // Store the old content
+        timestamp: new Date(), // Timestamp of when this old version was superseded
+      };
+      return {
+        ...item,
+        content: newContent, // New content becomes current
+        versions: previousVersionNumber + 1, // Increment total versions
+        history: [...(item.history || []), newHistoryEntry].sort((a,b) => b.versionNumber - a.versionNumber), // Add to history and keep sorted
+      };
+    }
+    if (item.children) {
+      return {
+        ...item,
+        children: updatePromptInTree(item.children, targetId, newContent),
       };
     }
     return item;

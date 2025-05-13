@@ -1,4 +1,3 @@
-
 "use client"
 
 import * as React from "react";
@@ -17,10 +16,9 @@ import {
   SidebarMenuSubButton,
   SidebarGroup,
   SidebarGroupLabel,
-  // SidebarInset, // Keep this commented if SidebarInset is used from ui/sidebar
   useSidebar,
-} from "@/components/ui/sidebar"; // Assuming this is a custom sidebar setup
-import { SidebarInset } from "@/components/ui/sidebar"; // Explicitly import if it's separate
+} from "@/components/ui/sidebar";
+import { SidebarInset } from "@/components/ui/sidebar";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,7 +46,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { optimizePrompt, PromptOptimizerInput, PromptOptimizerOutput } from "@/ai/flows/prompt-optimizer";
 import { NewPromptDialog, type NewPromptFormValues } from "@/components/dialogs/new-prompt-dialog";
-import { newId, addPromptToTree, addFolderToTree } from "@/lib/prompt-utils";
+import { EditPromptDialog } from "@/components/dialogs/edit-prompt-dialog";
+import { VersionHistoryDialog } from "@/components/dialogs/version-history-dialog";
+import { newId, addPromptToTree, addFolderToTree, updatePromptInTree } from "@/lib/prompt-utils";
 import {
   Home,
   Settings,
@@ -60,33 +60,38 @@ import {
   PlusCircle,
   UploadCloud,
   DownloadCloud,
-  Bot,
-  Star,
-  GitFork,
-  History,
-  Users,
-  Puzzle,
   Sparkles,
   BookOpen,
   Moon,
   Sun,
   Palette,
-  Keyboard
+  Keyboard,
+  GitFork,
+  History,
+  Users,
+  Puzzle,
+  Star
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import Image from "next/image";
 
-// Mock data for prompts
+export interface PromptVersion {
+  versionNumber: number;
+  content: string;
+  timestamp: Date;
+}
+
 export interface Prompt {
   id: string;
   name: string;
   type: "folder" | "prompt";
   icon?: React.ElementType;
   children?: Prompt[];
-  versions?: number;
+  versions?: number; // Current version number / total versions
   isFavorite?: boolean;
-  content?: string;
+  content?: string; // Current content
+  history?: PromptVersion[]; // Array of past versions, sorted descending by versionNumber
 }
+
 
 const initialMockPrompts: Prompt[] = [
   {
@@ -95,9 +100,36 @@ const initialMockPrompts: Prompt[] = [
     type: "folder",
     icon: Folder,
     children: [
-      { id: "1-1", name: "Ad Copy Generator", type: "prompt", icon: FileText, versions: 3, content: "Generate ad copy for {{product}}" },
-      { id: "1-2", name: "Email Campaigns", type: "folder", icon: Folder, children: [
-        { id: "1-2-1", name: "Welcome Email", type: "prompt", icon: FileText, versions: 2, isFavorite: true, content: "Write a welcome email for new subscribers." }
+      { 
+        id: "1-1", 
+        name: "Ad Copy Generator", 
+        type: "prompt", 
+        icon: FileText, 
+        versions: 3, 
+        content: "Generate ad copy for {{product}} - V3",
+        history: [
+          { versionNumber: 2, content: "Generate ad copy for {{product}} - V2", timestamp: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) },
+          { versionNumber: 1, content: "Generate ad copy for {{product}} - V1", timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) },
+        ]
+      },
+      { 
+        id: "1-2", 
+        name: "Email Campaigns", 
+        type: "folder", 
+        icon: Folder, 
+        children: [
+          { 
+            id: "1-2-1", 
+            name: "Welcome Email", 
+            type: "prompt", 
+            icon: FileText, 
+            versions: 2, 
+            isFavorite: true, 
+            content: "Write a welcome email for new subscribers. - V2",
+            history: [
+              { versionNumber: 1, content: "Write a welcome email for new subscribers. - V1", timestamp: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000) }
+            ]
+          }
       ]},
     ],
   },
@@ -107,10 +139,27 @@ const initialMockPrompts: Prompt[] = [
     type: "folder",
     icon: Folder,
     children: [
-      { id: "2-1", name: "Code Documentation", type: "prompt", icon: FileText, versions: 5, content: "Generate documentation for the following code: {{code_snippet}}" },
+      { 
+        id: "2-1", 
+        name: "Code Documentation", 
+        type: "prompt", 
+        icon: FileText, 
+        versions: 1, 
+        content: "Generate documentation for the following code: {{code_snippet}}",
+        history: []
+      },
     ],
   },
-  { id: "3", name: "My Favorite Prompt", type: "prompt", icon: FileText, versions: 1, isFavorite: true, content: "This is my favorite prompt for daily summaries." }
+  { 
+    id: "3", 
+    name: "My Favorite Prompt", 
+    type: "prompt", 
+    icon: FileText, 
+    versions: 1, 
+    isFavorite: true, 
+    content: "This is my favorite prompt for daily summaries.",
+    history: []
+  }
 ];
 
 const PromptTreeItem: React.FC<{ item: Prompt; level: number; onSelectPrompt: (prompt: Prompt) => void; selectedPromptId?: string }> = ({ item, level, onSelectPrompt, selectedPromptId }) => {
@@ -143,8 +192,7 @@ const PromptTreeItem: React.FC<{ item: Prompt; level: number; onSelectPrompt: (p
         tooltip={sidebarState === 'collapsed' ? item.name : undefined}
       >
         <Icon className="h-4 w-4 mr-2 flex-shrink-0" />
-         {/* Ensure children are handled correctly for collapsed state */}
-        {!(sidebarState === 'collapsed' && React.Children.count(item.name) > 1) && (
+        {!(sidebarState === 'collapsed' && typeof item.name === 'string' && item.name.length > 1) && (
             <span className="truncate flex-grow">{item.name}</span>
         )}
         {item.isFavorite && <Star className="h-3 w-3 ml-auto text-yellow-400 flex-shrink-0" />}
@@ -174,7 +222,10 @@ const AiOptimizerModal: React.FC<{ open: boolean; onOpenChange: (open: boolean) 
     if (initialPrompt) {
       setPromptToOptimize(initialPrompt);
     }
-  }, [initialPrompt]);
+     if (!open) { // Reset suggestions when dialog closes
+      setSuggestions([]);
+    }
+  }, [initialPrompt, open]);
 
   const handleSubmit = async () => {
     if (!promptToOptimize.trim()) {
@@ -240,6 +291,10 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   const [isSearchOpen, setIsSearchOpen] = React.useState(false);
   const [isOptimizerOpen, setIsOptimizerOpen] = React.useState(false);
   const [isNewPromptDialogOpen, setIsNewPromptDialogOpen] = React.useState(false);
+  const [isEditPromptDialogOpen, setIsEditPromptDialogOpen] = React.useState(false);
+  const [isVersionHistoryDialogOpen, setIsVersionHistoryDialogOpen] = React.useState(false);
+  const [promptForHistory, setPromptForHistory] = React.useState<Prompt | null>(null);
+
   const { setTheme, theme } = useTheme();
   const { toast } = useToast();
 
@@ -279,14 +334,15 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       icon: FileText,
       versions: 1,
       isFavorite: false,
+      history: [],
     };
 
+    let newPromptsList = [...prompts];
     if (data.saveLocationType === "existing") {
       if (data.selectedExistingFolderId) {
-        setPrompts(prev => addPromptToTree(prev, data.selectedExistingFolderId!, newPromptItem));
+        newPromptsList = addPromptToTree(prompts, data.selectedExistingFolderId!, newPromptItem);
       } else {
-         // Should not happen if validation is correct, but as a fallback add to root
-        setPrompts(prev => [...prev, newPromptItem]);
+        newPromptsList = [...prompts, newPromptItem];
         toast({ title: "Warning", description: "No folder selected, prompt added to root.", variant: "default" });
       }
     } else if (data.saveLocationType === "new") {
@@ -296,20 +352,60 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         type: "folder",
         icon: Folder,
         children: [newPromptItem],
+        history: [],
+        versions: 0, // Folders don't have versions in this context
       };
-      setPrompts(prev => addFolderToTree(prev, data.newFolderParentId || 'root', newFolder));
+      newPromptsList = addFolderToTree(prompts, data.newFolderParentId || 'root', newFolder);
     }
-    setSelectedPrompt(newPromptItem); // Optionally select the newly created prompt
+    setPrompts(newPromptsList);
+    setSelectedPrompt(newPromptItem);
   };
 
+  const handleOpenEditPromptDialog = () => {
+    if (selectedPrompt && selectedPrompt.type === 'prompt') {
+      setIsEditPromptDialogOpen(true);
+    } else {
+      toast({ title: "Error", description: "Please select a prompt to edit.", variant: "destructive" });
+    }
+  };
 
-  const handleEditPrompt = () => {
-    toast({ title: "Action: Edit Prompt", description: "This button is now clickable." });
-    // TODO: Implement actual edit prompt functionality
+  const handleSaveChangesToPrompt = (newContent: string) => {
+    if (!selectedPrompt || selectedPrompt.id === null) {
+      toast({ title: "Error", description: "No prompt selected for editing.", variant: "destructive" });
+      return;
+    }
+
+    const updatedPrompts = updatePromptInTree(prompts, selectedPrompt.id, newContent);
+    setPrompts(updatedPrompts);
+
+    // Find the updated prompt to set as selectedPrompt to reflect changes in UI
+    const findUpdated = (items: Prompt[], id: string): Prompt | null => {
+      for (const item of items) {
+        if (item.id === id) return item;
+        if (item.children) {
+          const foundInChildren = findUpdated(item.children, id);
+          if (foundInChildren) return foundInChildren;
+        }
+      }
+      return null;
+    };
+    const newlySelectedPrompt = findUpdated(updatedPrompts, selectedPrompt.id);
+    setSelectedPrompt(newlySelectedPrompt);
+    
+    setIsEditPromptDialogOpen(false);
+    toast({ title: "Success", description: `Prompt "${selectedPrompt.name}" updated to version ${newlySelectedPrompt?.versions}.` });
+  };
+
+  const handleOpenVersionHistory = () => {
+    if (selectedPrompt && selectedPrompt.type === 'prompt') {
+      setPromptForHistory(selectedPrompt);
+      setIsVersionHistoryDialogOpen(true);
+    } else {
+      toast({ title: "Error", description: "Please select a prompt to view its history.", variant: "destructive" });
+    }
   };
   
   const sidebarWidth = "280px";
-
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -403,7 +499,6 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       <SidebarInset>
         <header className="sticky top-0 z-10 flex items-center h-[72px] border-b bg-background px-6 shadow-sm">
           <div className="flex-1">
-            {/* Breadcrumbs could go here */}
             <h2 className="text-2xl font-semibold">
               {selectedPrompt ? selectedPrompt.name : "Dashboard"}
             </h2>
@@ -431,8 +526,8 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-xl font-semibold">{selectedPrompt.name}</h3>
                 <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => { setIsOptimizerOpen(true); }}><Sparkles className="mr-1 h-4 w-4" /> Optimize</Button>
-                  <Button variant="ghost" size="sm" onClick={() => toast({title: "Versions clicked"}) }><History className="mr-1 h-4 w-4" /> Versions ({selectedPrompt.versions})</Button>
+                  <Button variant="ghost" size="sm" onClick={() => setIsOptimizerOpen(true)}><Sparkles className="mr-1 h-4 w-4" /> Optimize</Button>
+                  <Button variant="ghost" size="sm" onClick={handleOpenVersionHistory}><History className="mr-1 h-4 w-4" /> Versions ({selectedPrompt.versions || 0})</Button>
                    <Button variant="ghost" size="sm" onClick={() => toast({title: "Branch clicked"})}><GitFork className="mr-1 h-4 w-4" /> Branch</Button>
                 </div>
               </div>
@@ -442,7 +537,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                 className="w-full min-h-[300px] p-4 font-code text-sm bg-background rounded-md border"
               />
                <div className="mt-4 flex justify-end">
-                <Button onClick={handleEditPrompt}>Edit Prompt</Button>
+                <Button onClick={handleOpenEditPromptDialog}>Edit Prompt</Button>
               </div>
             </div>
           ) : (
@@ -453,6 +548,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       <CommandDialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
          <DialogHeader className="sr-only"> 
             <DialogTitle>Command Menu</DialogTitle>
+            <DialogDescription>Use this to search for prompts or execute commands.</DialogDescription>
          </DialogHeader>
         <CommandInput placeholder="Type a command or search..." />
         <CommandList>
@@ -492,6 +588,20 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         onOpenChange={setIsNewPromptDialogOpen}
         allPrompts={prompts}
         onCreate={handleCreateNewItem}
+      />
+      {selectedPrompt && selectedPrompt.type === 'prompt' && (
+        <EditPromptDialog
+          open={isEditPromptDialogOpen}
+          onOpenChange={setIsEditPromptDialogOpen}
+          promptName={selectedPrompt.name}
+          initialContent={selectedPrompt.content || ""}
+          onSave={handleSaveChangesToPrompt}
+        />
+      )}
+      <VersionHistoryDialog
+        open={isVersionHistoryDialogOpen}
+        onOpenChange={setIsVersionHistoryDialogOpen}
+        prompt={promptForHistory}
       />
     </SidebarProvider>
   );
