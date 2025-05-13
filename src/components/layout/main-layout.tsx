@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react";
@@ -65,7 +66,7 @@ import {
   Moon,
   Sun,
   Palette,
-  History,  // Removed Keyboard, GitFork, Users, Puzzle as they were not used in the immediate context after previous changes. Added History.
+  History,  
   Star
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -82,10 +83,10 @@ export interface Prompt {
   type: "folder" | "prompt";
   icon?: React.ElementType;
   children?: Prompt[];
-  versions?: number; // Current version number / total versions
+  versions?: number; 
   isFavorite?: boolean;
-  content?: string; // Current content
-  history?: PromptVersion[]; // Array of past versions, sorted descending by versionNumber
+  content?: string; 
+  history?: PromptVersion[]; 
 }
 
 
@@ -218,7 +219,7 @@ const AiOptimizerModal: React.FC<{ open: boolean; onOpenChange: (open: boolean) 
         setSuggestions([]); 
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]); // initialPrompt removed from deps to snapshot on open and protect typing
+  }, [open]); 
 
   const handleSubmit = async () => {
     if (!promptToOptimize.trim()) {
@@ -312,11 +313,88 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
   };
 
   const handleImport = () => {
-    toast({ title: "Import", description: "Import functionality not yet implemented." });
-  };
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = ".json";
+    fileInput.onchange = (event) => {
+      const target = event.target as HTMLInputElement;
+      const file = target.files?.[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const content = e.target?.result;
+            if (typeof content === 'string') {
+              const importedPrompts = JSON.parse(content);
+              
+              if (Array.isArray(importedPrompts) && 
+                  (importedPrompts.length === 0 || 
+                   (importedPrompts[0] && typeof importedPrompts[0].id === 'string' && typeof importedPrompts[0].name === 'string' && typeof importedPrompts[0].type === 'string'))) {
+                
+                const sanitizedPrompts = importedPrompts.map((prompt: any) => {
+                  // Ensure versions is at least 1 if content exists and versions is missing
+                  const versions = (prompt.versions === undefined && prompt.content !== undefined) ? 1 : prompt.versions;
+                  
+                  // Ensure history array exists and timestamps are Date objects
+                  const history = (prompt.history || []).map((h: any) => ({
+                    ...h,
+                    timestamp: new Date(h.timestamp),
+                  })).sort((a: PromptVersion, b: PromptVersion) => b.versionNumber - a.versionNumber);
 
+                  return { ...prompt, versions, history };
+                });
+  
+                setPrompts(sanitizedPrompts as Prompt[]);
+                setSelectedPrompt(null); 
+                toast({ title: "Import Successful", description: "Prompts imported successfully." });
+              } else {
+                toast({ title: "Import Failed", description: "Invalid file format. Expected an array of prompts.", variant: "destructive" });
+              }
+            } else {
+              toast({ title: "Import Failed", description: "Could not read file content.", variant: "destructive" });
+            }
+          } catch (error) {
+            console.error("Error importing prompts:", error);
+            toast({ title: "Import Failed", description: "Error parsing JSON file. Ensure it's valid.", variant: "destructive" });
+          }
+        };
+        reader.onerror = () => {
+          toast({ title: "Import Failed", description: "Error reading file.", variant: "destructive" });
+        };
+        reader.readAsText(file);
+      }
+    };
+    fileInput.click();
+  };
+  
   const handleExport = () => {
-    toast({ title: "Export", description: "Export functionality not yet implemented." });
+    if (prompts.length === 0) {
+      toast({ title: "Export Prompts", description: "No prompts to export.", variant: "default" });
+      return;
+    }
+    try {
+      const jsonString = JSON.stringify(prompts, (key, value) => {
+        // Convert Date objects to ISO strings for consistent JSON output
+        if (key === 'timestamp' && value instanceof Date) {
+          return value.toISOString();
+        }
+        return value;
+      }, 2); 
+      const blob = new Blob([jsonString], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const date = new Date().toISOString().split('T')[0]; 
+      a.download = `promptverse_export_${date}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: "Export Successful", description: "Prompts exported successfully." });
+    } catch (error) {
+      console.error("Error exporting prompts:", error);
+      toast({ title: "Export Failed", description: "An error occurred while exporting prompts.", variant: "destructive" });
+    }
   };
   
   const handleOpenNewPromptDialog = () => {
@@ -364,6 +442,7 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
     setPrompts(newPromptsList);
     setSelectedPrompt(newPromptItem); 
     setIsNewPromptDialogOpen(false); 
+    toast({ title: "Success", description: `Prompt "${newPromptItem.name}" created successfully.` });
   };
 
   const handleOpenEditPromptDialog = () => {
@@ -456,7 +535,6 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
               </SidebarGroup>
 
               <SidebarGroup>
-                 {/* Removed Puzzle icon from Tools label as per previous cleanup for unused icons */}
                 <SidebarGroupLabel tooltip="Tools" className="flex items-center"> Tools </SidebarGroupLabel>
                  <SidebarMenuItem>
                     <SidebarMenuButton onClick={() => handleOpenOptimizerDialog()} tooltip="AI Optimizer">
@@ -484,7 +562,6 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
             <DropdownMenuContent side="top" align="start" className="w-56 bg-popover">
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {/* Removed Users icon from Profile menu item */}
               <DropdownMenuItem> Profile</DropdownMenuItem> 
               <DropdownMenuItem><Settings className="mr-2 h-4 w-4" /> Settings</DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -532,8 +609,7 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
                 <div className="flex gap-2">
                   <Button variant="ghost" size="sm" onClick={() => handleOpenOptimizerDialog(selectedPrompt?.content)}><Sparkles className="mr-1 h-4 w-4" /> Optimize</Button>
                   <Button variant="ghost" size="sm" onClick={handleOpenVersionHistory}><History className="mr-1 h-4 w-4" /> Versions ({selectedPrompt.versions || 0})</Button>
-                   {/* Removed GitFork icon from Branch button */}
-                   <Button variant="ghost" size="sm" onClick={() => toast({title: "Branch clicked"})}> Branch</Button>
+                   <Button variant="ghost" size="sm" onClick={() => toast({title: "Branch clicked", description: "Branching functionality coming soon."})}> Branch</Button>
                 </div>
               </div>
               <Textarea
@@ -551,10 +627,10 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
         </main>
       </SidebarInset>
       <CommandDialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
-         <DialogHeader className="p-0 m-0 border-0 sr-only"> 
-            <DialogTitle>Command Menu</DialogTitle>
-            <DialogDescription>Use this to search for prompts or execute commands.</DialogDescription>
-         </DialogHeader>
+        <DialogHeader className="p-0 m-0 border-0 sr-only">
+          <DialogTitle>Command Menu</DialogTitle>
+          <DialogDescription>Use this to search for prompts or execute commands.</DialogDescription>
+        </DialogHeader>
         <CommandInput placeholder="Type a command or search..." />
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
@@ -615,3 +691,5 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
     </SidebarProvider>
   );
 }
+
+    
