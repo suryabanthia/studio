@@ -3,50 +3,16 @@ import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 
-const firebaseConfigValues = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID, // Optional
+// Your web app's Firebase configuration - Directly using the config provided by the user.
+const firebaseConfig = {
+  apiKey: "AIzaSyDski1hHnVu-UMZ4Ois3xEmMGTzgun-y0o",
+  authDomain: "promptverse-10ydl.firebaseapp.com",
+  projectId: "promptverse-10ydl",
+  storageBucket: "promptverse-10ydl.firebasestorage.app", // Corrected from .firebasestorage.app
+  messagingSenderId: "521983968297",
+  appId: "1:521983968297:web:24682d9240cba731664838",
+  // measurementId is optional, can be added if needed
 };
-
-// Check for placeholder values or missing essential keys
-const requiredClientKeys = {
-  NEXT_PUBLIC_FIREBASE_API_KEY: firebaseConfigValues.apiKey,
-  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: firebaseConfigValues.authDomain,
-  NEXT_PUBLIC_FIREBASE_PROJECT_ID: firebaseConfigValues.projectId,
-  // Add other keys if they become strictly required for basic app functionality
-  // storageBucket, messagingSenderId, appId are often important too
-};
-
-const missingOrPlaceholderClientKeys = Object.entries(requiredClientKeys)
-  .filter(([key, value]) => !value || value.startsWith("YOUR_") || value.startsWith("YOUR-") || value.includes("PLACEHOLDER") || value.length < 5) // Basic length check
-  .map(([key]) => key);
-
-if (missingOrPlaceholderClientKeys.length > 0) {
-  const message = `FATAL: Firebase Client Configuration Error!
-Firebase client configuration is incomplete or uses placeholder values.
-Please set the following environment variable(s) in your .env file with your actual Firebase project credentials:
-${missingOrPlaceholderClientKeys.join('\n')}
-
-Firebase client-side functionality will be disabled until these are correctly configured.
-You can find these values in your Firebase project settings on the Firebase console.
-
-Example .env content:
-NEXT_PUBLIC_FIREBASE_API_KEY="your-actual-api-key"
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="your-project-id.firebaseapp.com"
-NEXT_PUBLIC_FIREBASE_PROJECT_ID="your-project-id"
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="your-project-id.appspot.com" # Optional but recommended
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="your-sender-id" # Optional
-NEXT_PUBLIC_FIREBASE_APP_ID="your-app-id" # Optional
-`;
-  console.error(message);
-  throw new Error(message);
-}
-
 
 let app: FirebaseApp;
 let auth: Auth;
@@ -54,9 +20,21 @@ let db: Firestore;
 
 if (!getApps().length) {
   try {
-    app = initializeApp(firebaseConfigValues);
+    // Basic check for placeholder values in the hardcoded config, though ideally it's correct.
+    if (!firebaseConfig.apiKey || firebaseConfig.apiKey.startsWith("AIzaSyYOUR_") || firebaseConfig.apiKey.includes("PLACEHOLDER")) {
+        const message = `FATAL: Firebase Client Configuration Error!
+The hardcoded firebaseConfig in src/lib/firebase/firebase.ts appears to use placeholder or invalid values.
+Please ensure the firebaseConfig object contains your actual Firebase project credentials.
+
+Firebase client-side functionality will be disabled until these are correctly configured.
+You can find these values in your Firebase project settings on the Firebase console.
+`;
+        console.error(message);
+        throw new Error(message);
+    }
+    app = initializeApp(firebaseConfig);
   } catch (e: any) {
-    console.error("Firebase Initialization Error: Failed to initialize Firebase app. This usually means your Firebase config values are incorrect even if they are not placeholders. Double-check them in the Firebase console.", e.message);
+    console.error("Firebase Initialization Error: Failed to initialize Firebase app. This usually means your Firebase config values (hardcoded in firebase.ts) are incorrect. Double-check them in the Firebase console.", e.message);
     // @ts-ignore
     app = undefined; 
   }
