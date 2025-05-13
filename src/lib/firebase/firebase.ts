@@ -13,22 +13,24 @@ const firebaseConfigValues = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID, // Optional
 };
 
-const requiredKeys = {
+// Check for placeholder values or missing essential keys
+const requiredClientKeys = {
   NEXT_PUBLIC_FIREBASE_API_KEY: firebaseConfigValues.apiKey,
   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: firebaseConfigValues.authDomain,
   NEXT_PUBLIC_FIREBASE_PROJECT_ID: firebaseConfigValues.projectId,
   // Add other keys if they become strictly required for basic app functionality
+  // storageBucket, messagingSenderId, appId are often important too
 };
 
-const missingOrPlaceholderKeys = Object.entries(requiredKeys)
+const missingOrPlaceholderClientKeys = Object.entries(requiredClientKeys)
   .filter(([key, value]) => !value || value.startsWith("YOUR_") || value.startsWith("YOUR-") || value.includes("PLACEHOLDER") || value.length < 5) // Basic length check
   .map(([key]) => key);
 
-if (missingOrPlaceholderKeys.length > 0) {
+if (missingOrPlaceholderClientKeys.length > 0) {
   const message = `FATAL: Firebase Client Configuration Error!
 Firebase client configuration is incomplete or uses placeholder values.
 Please set the following environment variable(s) in your .env file with your actual Firebase project credentials:
-${missingOrPlaceholderKeys.join('\n')}
+${missingOrPlaceholderClientKeys.join('\n')}
 
 Firebase client-side functionality will be disabled until these are correctly configured.
 You can find these values in your Firebase project settings on the Firebase console.
@@ -41,11 +43,10 @@ NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="your-project-id.appspot.com" # Optional but
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="your-sender-id" # Optional
 NEXT_PUBLIC_FIREBASE_APP_ID="your-app-id" # Optional
 `;
-  // Log to console for server-side visibility during build/dev
   console.error(message);
-  // Throw an error to halt execution and make the issue very clear in the browser
   throw new Error(message);
 }
+
 
 let app: FirebaseApp;
 let auth: Auth;
@@ -75,8 +76,6 @@ if (app) {
     db = undefined;
   }
 } else {
-    // This case is now less likely if the config check above throws an error.
-    // But kept for robustness.
     console.warn("Firebase app object is not available (likely due to prior config errors). Auth and Firestore will not be initialized.");
     // @ts-ignore
     auth = undefined; 
