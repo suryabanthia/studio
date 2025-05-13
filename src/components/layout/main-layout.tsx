@@ -13,13 +13,12 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarMenuSub,
-  SidebarMenuSubButton,
+  // SidebarMenuSubButton, // Not used directly for prompt tree
   SidebarGroup,
   SidebarGroupLabel,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { SidebarInset } from "@/components/ui/sidebar";
-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -33,6 +32,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   CommandDialog,
   CommandEmpty,
   CommandGroup,
@@ -41,21 +51,23 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogDescription, DialogHeader } from "@/components/ui/dialog";
+import { DialogTitle as ShadDialogTitle } from "@/components/ui/dialog"; // Renamed to avoid conflict
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { optimizePrompt, type PromptOptimizerInput, type PromptOptimizerOutput } from "@/ai/flows/prompt-optimizer";
 import { NewPromptDialog, type NewPromptFormValues } from "@/components/dialogs/new-prompt-dialog";
 import { EditPromptDialog } from "@/components/dialogs/edit-prompt-dialog";
 import { VersionHistoryDialog } from "@/components/dialogs/version-history-dialog";
-import { newId, addPromptToTree, addFolderToTree, updatePromptInTree, addPromptNextToSibling } from "@/lib/prompt-utils";
+import { newId, buildPromptTree, addPromptToTree, addFolderToTree, updatePromptInTree, findPromptInTree, findItemPath } from "@/lib/prompt-utils";
+import type { FirebasePrompt, FirebaseFolder, FirebasePromptVersion } from "@/types/firebase.types";
 import {
   Home,
   Settings,
   LifeBuoy,
   ChevronDown,
   Search,
-  Folder,
+  Folder as FolderIcon, // Renamed to avoid conflict
   FileText,
   PlusCircle,
   UploadCloud,
@@ -67,99 +79,84 @@ import {
   Palette,
   History,  
   Star,
-  GitFork
+  GitFork,
+  Trash2,
+  Edit3
 } from "lucide-react";
 import { useTheme } from "next-themes";
+import { useAuth } from "@/contexts/AuthContext";
+import { useRouter } from "next/navigation";
+import { useQuery, useMutation, useQueryClient, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Timestamp } from "firebase/firestore";
 
-export interface PromptVersion {
-  versionNumber: number;
-  content: string;
+
+// Define client-side Prompt type which might include children for tree view
+export interface ClientPrompt extends Omit<FirebasePrompt, 'createdAt' | 'updatedAt'> {
+  type: 'prompt' | 'folder';
+  icon?: React.ElementType;
+  children?: ClientPrompt[];
+  createdAt: Date; // Convert Firestore Timestamps to Date for client
+  updatedAt: Date;
+  history?: ClientPromptVersion[]; // For client-side display
+}
+export interface ClientFolder extends Omit<FirebaseFolder, 'createdAt' | 'updatedAt'> {
+  type: 'folder';
+  icon?: React.ElementType;
+  children?: ClientPrompt[]; // Folders can contain prompts or other folders (represented as ClientPrompt with type 'folder')
+  createdAt: Date;
+  updatedAt: Date;
+}
+export interface ClientPromptVersion extends Omit<FirebasePromptVersion, 'timestamp'> {
   timestamp: Date;
 }
 
-export interface Prompt {
-  id: string;
-  name: string;
-  type: "folder" | "prompt";
-  icon?: React.ElementType;
-  children?: Prompt[];
-  versions?: number; 
-  isFavorite?: boolean;
-  content?: string; 
-  history?: PromptVersion[]; 
+// Helper to convert Firestore Timestamps in fetched data
+const convertTimestamps = (data: any) => {
+  if (data?.createdAt && data.createdAt.toDate) {
+    data.createdAt = data.createdAt.toDate();
+  }
+  if (data?.updatedAt && data.updatedAt.toDate) {
+    data.updatedAt = data.updatedAt.toDate();
+  }
+  if (data?.timestamp && data.timestamp.toDate) { // For versions
+    data.timestamp = data.timestamp.toDate();
+  }
+  if (data?.history) {
+    data.history = data.history.map(convertTimestamps);
+  }
+  if (data?.children) {
+    data.children = data.children.map(convertTimestamps);
+  }
+  return data;
+};
+
+
+const fetchPrompts = async (idToken: string | undefined): Promise<ClientPrompt[]> => {
+  if (!idToken) throw new Error("Not authenticated");
+  const res = await fetch('/api/prompts', { headers: { 'Authorization': `Bearer ${idToken}` } });
+  if (!res.ok) throw new Error('Failed to fetch prompts');
+  const prompts: FirebasePrompt[] = await res.json();
+  return prompts.map(p => ({ ...convertTimestamps(p), type: 'prompt', icon: FileText })) as ClientPrompt[];
+};
+
+const fetchFolders = async (idToken: string | undefined): Promise<ClientFolder[]> => {
+  if (!idToken) throw new Error("Not authenticated");
+  const res = await fetch('/api/folders', { headers: { 'Authorization': `Bearer ${idToken}` } });
+  if (!res.ok) throw new Error('Failed to fetch folders');
+  const folders: FirebaseFolder[] = await res.json();
+  return folders.map(f => ({ ...convertTimestamps(f), type: 'folder', icon: FolderIcon })) as ClientFolder[];
+};
+
+const fetchPromptVersions = async (promptId: string, idToken: string | undefined): Promise<ClientPromptVersion[]> => {
+  if (!idToken) throw new Error("Not authenticated");
+  const res = await fetch(`/api/prompts/${promptId}/versions`, { headers: { 'Authorization': `Bearer ${idToken}` }});
+  if (!res.ok) throw new Error('Failed to fetch prompt versions');
+  const versions: FirebasePromptVersion[] = await res.json();
+  return versions.map(v => convertTimestamps(v) as ClientPromptVersion);
 }
 
 
-const initialMockPrompts: Prompt[] = [
-  {
-    id: "1",
-    name: "Marketing",
-    type: "folder",
-    icon: Folder,
-    children: [
-      { 
-        id: "1-1", 
-        name: "Ad Copy Generator", 
-        type: "prompt", 
-        icon: FileText, 
-        versions: 3, 
-        content: "Generate ad copy for {{product}} - V3",
-        history: [
-          { versionNumber: 2, content: "Generate ad copy for {{product}} - V2", timestamp: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) },
-          { versionNumber: 1, content: "Generate ad copy for {{product}} - V1", timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) },
-        ]
-      },
-      { 
-        id: "1-2", 
-        name: "Email Campaigns", 
-        type: "folder", 
-        icon: Folder, 
-        children: [
-          { 
-            id: "1-2-1", 
-            name: "Welcome Email", 
-            type: "prompt", 
-            icon: FileText, 
-            versions: 2, 
-            isFavorite: true, 
-            content: "Write a welcome email for new subscribers. - V2",
-            history: [
-              { versionNumber: 1, content: "Write a welcome email for new subscribers. - V1", timestamp: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000) }
-            ]
-          }
-      ]},
-    ],
-  },
-  {
-    id: "2",
-    name: "Development",
-    type: "folder",
-    icon: Folder,
-    children: [
-      { 
-        id: "2-1", 
-        name: "Code Documentation", 
-        type: "prompt", 
-        icon: FileText, 
-        versions: 1, 
-        content: "Generate documentation for the following code: {{code_snippet}}",
-        history: []
-      },
-    ],
-  },
-  { 
-    id: "3", 
-    name: "My Favorite Prompt", 
-    type: "prompt", 
-    icon: FileText, 
-    versions: 1, 
-    isFavorite: true, 
-    content: "This is my favorite prompt for daily summaries.",
-    history: []
-  }
-];
-
-const PromptTreeItem: React.FC<{ item: Prompt; level: number; onSelectPrompt: (prompt: Prompt) => void; selectedPromptId?: string }> = ({ item, level, onSelectPrompt, selectedPromptId }) => {
+const PromptTreeItem: React.FC<{ item: ClientPrompt | ClientFolder; level: number; onSelectPromptOrFolder: (item: ClientPrompt | ClientFolder) => void; selectedItemId?: string }> = ({ item, level, onSelectPromptOrFolder, selectedItemId }) => {
   const [isOpen, setIsOpen] = React.useState(true);
   const { state: sidebarState } = useSidebar();
 
@@ -170,15 +167,14 @@ const PromptTreeItem: React.FC<{ item: Prompt; level: number; onSelectPrompt: (p
   };
 
   const handleSelect = () => {
-    if (item.type === "prompt") {
-      onSelectPrompt(item);
-    } else {
-      handleToggle();
+    onSelectPromptOrFolder(item);
+    if (item.type === "folder") {
+      handleToggle(); // Also toggle folder on select
     }
   };
 
-  const Icon = item.icon || (item.type === "folder" ? Folder : FileText);
-  const isActive = selectedPromptId === item.id;
+  const Icon = item.icon || (item.type === "folder" ? FolderIcon : FileText);
+  const isActive = selectedItemId === item.id;
 
   return (
     <SidebarMenuItem>
@@ -190,15 +186,15 @@ const PromptTreeItem: React.FC<{ item: Prompt; level: number; onSelectPrompt: (p
       >
         <Icon className="h-4 w-4 mr-2 flex-shrink-0" />
          { sidebarState === 'expanded' && <span className="truncate flex-grow">{item.name}</span> }
-        {item.isFavorite && <Star className="h-3 w-3 ml-auto text-yellow-400 flex-shrink-0" />}
-        {item.type === "folder" && item.children && sidebarState === 'expanded' && (
+        {(item.type === 'prompt' && (item as ClientPrompt).isFavorite) && <Star className="h-3 w-3 ml-auto text-yellow-400 flex-shrink-0" />}
+        {item.type === "folder" && (item as ClientFolder).children && sidebarState === 'expanded' && (
           <ChevronDown className={`h-4 w-4 ml-auto transition-transform flex-shrink-0 ${isOpen ? "rotate-180" : ""}`} />
         )}
       </SidebarMenuButton>
-      {item.type === "folder" && isOpen && item.children && sidebarState === 'expanded' && (
+      {item.type === "folder" && isOpen && (item as ClientFolder).children && sidebarState === 'expanded' && (
         <SidebarMenuSub>
-          {item.children.map((child) => (
-            <PromptTreeItem key={child.id} item={child} level={level + 1} onSelectPrompt={onSelectPrompt} selectedPromptId={selectedPromptId}/>
+          {(item as ClientFolder).children!.map((child) => (
+            <PromptTreeItem key={child.id} item={child} level={level + 1} onSelectPromptOrFolder={onSelectPromptOrFolder} selectedItemId={selectedItemId}/>
           ))}
         </SidebarMenuSub>
       )}
@@ -240,15 +236,14 @@ const AiOptimizerModal: React.FC<{ open: boolean; onOpenChange: (open: boolean) 
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[625px] bg-card">
-        <DialogHeader>
-          <DialogTitle className="flex items-center"><Sparkles className="w-5 h-5 mr-2 text-primary" /> AI Prompt Optimizer</DialogTitle>
-          <DialogDescription>
+        <ShadDialogTitle className="sr-only">AI Prompt Optimizer</ShadDialogTitle>
+        <div className="flex items-center p-6 pt-0 border-b"><Sparkles className="w-5 h-5 mr-2 text-primary" /> AI Prompt Optimizer</div>
+          <DialogDescription className="p-6 pt-2 text-muted-foreground">
             Enter your prompt below to get AI-powered suggestions for improvement.
           </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-4 py-4">
+        <div className="grid gap-4 py-4 px-6">
           <Textarea
             placeholder="Enter your prompt here..."
             value={promptToOptimize}
@@ -267,12 +262,12 @@ const AiOptimizerModal: React.FC<{ open: boolean; onOpenChange: (open: boolean) 
             </div>
           )}
         </div>
-        <DialogFooter>
+        <div className="flex justify-end gap-2 p-6 border-t">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={handleSubmit} disabled={isLoading}>
             {isLoading ? "Optimizing..." : "Optimize Prompt"}
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -283,16 +278,185 @@ interface MainLayoutChildrenProps {
   openOptimizerDialog: (initialPrompt?: string) => void;
 }
 
-export function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) => React.ReactNode }) {
-  const [prompts, setPrompts] = React.useState<Prompt[]>(initialMockPrompts);
-  const [selectedPrompt, setSelectedPrompt] = React.useState<Prompt | null>(null);
+const queryClient = new QueryClient();
+
+export function MainLayoutWrapper({ children }: { children: (props: MainLayoutChildrenProps) => React.ReactNode }) {
+    return (
+        <QueryClientProvider client={queryClient}>
+            <MainLayout>{children}</MainLayout>
+        </QueryClientProvider>
+    )
+}
+
+
+function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) => React.ReactNode }) {
+  const { user, signOut: firebaseSignOut, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+  const queryClientHook = useQueryClient(); // Using Tanstack Query's client
+
+  const [selectedItem, setSelectedItem] = React.useState<ClientPrompt | ClientFolder | null>(null);
   const [isSearchOpen, setIsSearchOpen] = React.useState(false);
   const [isOptimizerOpen, setIsOptimizerOpen] = React.useState(false);
   const [optimizerInitialPrompt, setOptimizerInitialPrompt] = React.useState<string | undefined>(undefined);
   const [isNewPromptDialogOpen, setIsNewPromptDialogOpen] = React.useState(false);
   const [isEditPromptDialogOpen, setIsEditPromptDialogOpen] = React.useState(false);
   const [isVersionHistoryDialogOpen, setIsVersionHistoryDialogOpen] = React.useState(false);
-  const [promptForHistory, setPromptForHistory] = React.useState<Prompt | null>(null);
+  const [promptForHistory, setPromptForHistory] = React.useState<ClientPrompt | null>(null);
+  const [promptToDelete, setPromptToDelete] = React.useState<ClientPrompt | null>(null);
+  
+  const [idToken, setIdToken] = React.useState<string | undefined>(undefined);
+
+  React.useEffect(() => {
+    if (user) {
+      user.getIdToken().then(token => setIdToken(token));
+    } else {
+      setIdToken(undefined);
+    }
+  }, [user]);
+
+
+  const { data: promptsData, isLoading: promptsLoading, error: promptsError } = useQuery<ClientPrompt[]>({
+    queryKey: ['prompts', user?.uid],
+    queryFn: () => fetchPrompts(idToken),
+    enabled: !!user && !!idToken,
+  });
+
+  const { data: foldersData, isLoading: foldersLoading, error: foldersError } = useQuery<ClientFolder[]>({
+    queryKey: ['folders', user?.uid],
+    queryFn: () => fetchFolders(idToken),
+    enabled: !!user && !!idToken,
+  });
+  
+  const { data: versionsData, isLoading: versionsLoading, refetch: refetchVersions } = useQuery<ClientPromptVersion[]>({
+    queryKey: ['promptVersions', promptForHistory?.id, user?.uid],
+    queryFn: () => promptForHistory ? fetchPromptVersions(promptForHistory.id, idToken) : Promise.resolve([]),
+    enabled: !!promptForHistory && !!user && !!idToken, // Only fetch if a prompt is selected for history
+  });
+
+
+  const promptTree = React.useMemo(() => {
+    if (promptsData && foldersData) {
+      return buildPromptTree(promptsData, foldersData);
+    }
+    return [];
+  }, [promptsData, foldersData]);
+
+
+  const createPromptMutation = useMutation({
+    mutationFn: async (data: { values: NewPromptFormValues, itemType: 'prompt' | 'folder' }) => {
+      if (!idToken) throw new Error("Not authenticated");
+      const { values, itemType } = data;
+      let endpoint = itemType === 'prompt' ? '/api/prompts' : '/api/folders';
+      let payload: any;
+
+      if (itemType === 'prompt') {
+        payload = {
+          name: values.promptName,
+          content: values.promptContent,
+          folderId: values.saveLocationType === 'existing' ? values.selectedExistingFolderId : (values.saveLocationType === 'new' && values.newFolderParentId !== 'root' ? values.newFolderParentId : null), // This part needs refinement if new folder is created
+          isFavorite: false, // Default
+        };
+        // If saving into a new folder, we might need to create the folder first, then the prompt.
+        // For simplicity, this example assumes if saveLocationType is 'new', it's a new prompt in an existing or root folder,
+        // or this mutation is part of a larger flow that handles folder creation.
+        // The user schema implies a folderId for prompts.
+        if (values.saveLocationType === 'new') {
+            // Create folder first
+            const folderPayload = { name: values.newFolderName!, parentId: values.newFolderParentId === 'root' ? null : values.newFolderParentId };
+            const folderRes = await fetch('/api/folders', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+                body: JSON.stringify(folderPayload),
+            });
+            if (!folderRes.ok) throw new Error('Failed to create new folder');
+            const newFolder = await folderRes.json();
+            payload.folderId = newFolder.id; // Assign new folder's ID to the prompt
+        }
+
+
+      } else { // itemType === 'folder' - This case is for creating a standalone folder. NewPromptDialog handles prompt creation with optional new folder.
+        payload = { 
+            name: values.newFolderName!, // Assuming form has newFolderName for this
+            parentId: values.newFolderParentId === 'root' ? null : values.newFolderParentId 
+        }; 
+      }
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || `Failed to create ${itemType}`);
+      }
+      return res.json();
+    },
+    onSuccess: (newItem) => {
+      queryClientHook.invalidateQueries({ queryKey: ['prompts', user?.uid] });
+      queryClientHook.invalidateQueries({ queryKey: ['folders', user?.uid] });
+      setSelectedItem(convertTimestamps(newItem));
+      setIsNewPromptDialogOpen(false);
+      toast({ title: "Success", description: `${newItem.type === 'prompt' ? 'Prompt' : 'Folder'} "${newItem.name}" created.` });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  });
+
+  const updatePromptMutation = useMutation({
+    mutationFn: async (data: { id: string; content: string; name?: string; isFavorite?: boolean; folderId?: string | null }) => {
+      if (!idToken) throw new Error("Not authenticated");
+      const res = await fetch(`/api/prompts/${data.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+        body: JSON.stringify({ content: data.content, name: data.name, isFavorite: data.isFavorite, folderId: data.folderId }),
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to update prompt');
+      }
+      return res.json();
+    },
+    onSuccess: (updatedPrompt) => {
+      queryClientHook.invalidateQueries({ queryKey: ['prompts', user?.uid] });
+      queryClientHook.invalidateQueries({ queryKey: ['promptVersions', updatedPrompt.id, user?.uid] }); // Invalidate versions too
+      setSelectedItem(convertTimestamps(updatedPrompt));
+      setIsEditPromptDialogOpen(false);
+      toast({ title: "Success", description: `Prompt "${updatedPrompt.name}" updated to version ${updatedPrompt.versions}.` });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  });
+
+  const deletePromptMutation = useMutation({
+    mutationFn: async (promptId: string) => {
+      if (!idToken) throw new Error("Not authenticated");
+      const res = await fetch(`/api/prompts/${promptId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${idToken}` },
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to delete prompt');
+      }
+      return promptId;
+    },
+    onSuccess: (deletedPromptId) => {
+      queryClientHook.invalidateQueries({ queryKey: ['prompts', user?.uid] });
+      if (selectedItem?.id === deletedPromptId) {
+        setSelectedItem(null);
+      }
+      setPromptToDelete(null);
+      toast({ title: "Success", description: "Prompt deleted successfully." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+      setPromptToDelete(null);
+    }
+  });
+
 
   const { setTheme, theme } = useTheme();
   const { toast } = useToast();
@@ -308,228 +472,37 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
     return () => document.removeEventListener("keydown", down)
   }, [])
 
-  const handleSelectPrompt = (prompt: Prompt) => {
-    setSelectedPrompt(prompt);
+  const handleSelectPromptOrFolder = (item: ClientPrompt | ClientFolder) => {
+    setSelectedItem(item);
   };
 
-  const handleImport = () => {
-    const fileInput = document.createElement("input");
-    fileInput.type = "file";
-    fileInput.accept = ".json, .csv"; // Accept both JSON and CSV
-    fileInput.onchange = (event) => {
-      const target = event.target as HTMLInputElement;
-      const file = target.files?.[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          try {
-            const content = e.target?.result;
-            if (typeof content === 'string') {
-              let importedPrompts: any[];
-              if (file.name.endsWith(".json")) {
-                importedPrompts = JSON.parse(content);
-              } else if (file.name.endsWith(".csv")) {
-                // Basic CSV parsing: id,name,type,content,versions,isFavorite,parentId (optional)
-                // This is a simplified parser, for robust CSV, a library would be better.
-                const lines = content.split(/\r\n|\n/);
-                const headers = lines[0].split(',').map(h => h.trim());
-                const requiredHeaders = ['id', 'name', 'type'];
-                if (!requiredHeaders.every(h => headers.includes(h))) {
-                   toast({ title: "Import Failed", description: "CSV must include id, name, and type headers.", variant: "destructive" });
-                   return;
-                }
 
-                importedPrompts = lines.slice(1).map(line => {
-                  const values = line.split(','); // Simple split, doesn't handle commas in values well
-                  const promptData: any = {};
-                  headers.forEach((header, index) => {
-                    let value: any = values[index] ? values[index].trim() : undefined;
-                    if (header === 'versions') value = parseInt(value, 10) || 1;
-                    if (header === 'isFavorite') value = value === 'true';
-                    if (header === 'content' && value === undefined) value = ""; // Default content to empty string if missing
-                    promptData[header] = value;
-                  });
-                  return promptData;
-                }).filter(p => p.id && p.name && p.type); // Basic validation
-              } else {
-                toast({ title: "Import Failed", description: "Unsupported file type.", variant: "destructive" });
-                return;
-              }
-              
-              if (Array.isArray(importedPrompts) && 
-                  (importedPrompts.length === 0 || 
-                   (importedPrompts[0] && typeof importedPrompts[0].id === 'string' && typeof importedPrompts[0].name === 'string' && typeof importedPrompts[0].type === 'string'))) {
-                
-                // TODO: Handle CSV parentId to reconstruct hierarchy
-                // For now, CSV imports flattened or requires manual structuring post-import if parentId is complex.
-                // Simple parentId mapping could be done if CSV format specifies it.
-
-                const sanitizedPrompts = importedPrompts.map((prompt: any) => {
-                  const versions = (prompt.versions === undefined && prompt.content !== undefined) ? 1 : (Number(prompt.versions) || 1);
-                  const history = (prompt.history || []).map((h: any) => ({
-                    ...h,
-                    timestamp: h.timestamp ? new Date(h.timestamp) : new Date(), // Ensure timestamp is a Date
-                    versionNumber: Number(h.versionNumber) || 0,
-                  })).sort((a: PromptVersion, b: PromptVersion) => b.versionNumber - a.versionNumber);
-                  
-                  const children = prompt.children ? prompt.children.map((child: any) => ({...child})) : undefined; // Basic child sanitization
-
-                  return { 
-                    ...prompt, 
-                    versions, 
-                    history,
-                    content: prompt.content || "", // Ensure content exists
-                    isFavorite: !!prompt.isFavorite,
-                    icon: prompt.type === 'folder' ? Folder : FileText, // Assign default icons
-                    children: children
-                  };
-                });
-  
-                setPrompts(sanitizedPrompts as Prompt[]);
-                setSelectedPrompt(null); 
-                toast({ title: "Import Successful", description: `Prompts imported successfully from ${file.name}.` });
-              } else {
-                toast({ title: "Import Failed", description: "Invalid file format or empty data.", variant: "destructive" });
-              }
-            } else {
-              toast({ title: "Import Failed", description: "Could not read file content.", variant: "destructive" });
-            }
-          } catch (error: any) {
-            console.error("Error importing prompts:", error);
-            toast({ title: "Import Failed", description: `Error processing file: ${error.message || "Unknown error"}. Ensure it's valid.`, variant: "destructive" });
-          }
-        };
-        reader.onerror = () => {
-          toast({ title: "Import Failed", description: "Error reading file.", variant: "destructive" });
-        };
-        reader.readAsText(file);
-      }
-    };
-    fileInput.click();
+  const handleLogout = async () => {
+    await firebaseSignOut();
+    queryClientHook.clear(); // Clear React Query cache on logout
+    router.push('/login');
   };
   
-  const handleExport = (format: "json" | "csv") => {
-    if (prompts.length === 0) {
-      toast({ title: `Export Prompts (${format.toUpperCase()})`, description: "No prompts to export.", variant: "default" });
-      return;
-    }
-    try {
-      let dataString: string;
-      let mimeType: string;
-      let fileExtension: string;
-      const date = new Date().toISOString().split('T')[0]; 
 
-      if (format === "json") {
-        dataString = JSON.stringify(prompts, (key, value) => {
-          if (key === 'timestamp' && value instanceof Date) {
-            return value.toISOString();
-          }
-          // Strip icon functions for JSON export
-          if (key === 'icon' && typeof value === 'function') {
-            return undefined; 
-          }
-          return value;
-        }, 2);
-        mimeType = "application/json";
-        fileExtension = "json";
-      } else { // CSV
-        // Basic CSV export, flattens structure. For complex hierarchy, JSON is better.
-        // Header: id,name,type,content,versions,isFavorite,parentId (if applicable)
-        const flattenPrompts = (items: Prompt[], parentId?: string): any[] => {
-            let flatList: any[] = [];
-            items.forEach(item => {
-                const { children, icon, ...rest } = item; // Exclude children and icon from main object
-                flatList.push({ ...rest, parentId: parentId || 'root' });
-                if (children) {
-                    flatList = flatList.concat(flattenPrompts(children, item.id));
-                }
-            });
-            return flatList;
-        };
-        const flatPrompts = flattenPrompts(prompts);
-        if (flatPrompts.length === 0) {
-           toast({ title: "Export Failed", description: "No data to export to CSV.", variant: "destructive" });
-           return;
-        }
-        const headers = Object.keys(flatPrompts[0]).join(',');
-        const rows = flatPrompts.map(prompt => 
-            Object.values(prompt).map(value => {
-                if (typeof value === 'string' && (value.includes(',') || value.includes('\n') || value.includes('"'))) {
-                    return `"${value.replace(/"/g, '""')}"`; // Escape quotes and wrap
-                }
-                return value;
-            }).join(',')
-        );
-        dataString = `${headers}\n${rows.join('\n')}`;
-        mimeType = "text/csv";
-        fileExtension = "csv";
-      }
-
-      const blob = new Blob([dataString], { type: mimeType });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `promptverse_export_${date}.${fileExtension}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast({ title: "Export Successful", description: `Prompts exported to ${fileExtension}.` });
-    } catch (error: any) {
-      console.error("Error exporting prompts:", error);
-      toast({ title: "Export Failed", description: `An error occurred: ${error.message || "Unknown error"}.`, variant: "destructive" });
-    }
-  };
+  const handleImport = () => { /* ... existing import logic, adapted for Firebase if necessary ... */ toast({title: "Not Implemented", description: "Import from file needs to be adapted for Firebase."})};
+  const handleExport = (format: "json" | "csv") => { /* ... existing export logic, adapted for Firebase if necessary ... */ toast({title: "Not Implemented", description: `Export to ${format} needs to be adapted for Firebase.`})};
   
   const handleOpenNewPromptDialog = () => {
     setIsNewPromptDialogOpen(true);
   };
 
-  const handleOpenOptimizerDialog = (initialPrompt?: string) => {
-    setOptimizerInitialPrompt(initialPrompt || selectedPrompt?.content || "");
+  const handleOpenOptimizerDialog = (initialPromptText?: string) => {
+    const promptContentToOptimize = initialPromptText ?? (selectedItem?.type === 'prompt' ? (selectedItem as ClientPrompt).content : "");
+    setOptimizerInitialPrompt(promptContentToOptimize);
     setIsOptimizerOpen(true);
   };
 
-
   const handleCreateNewItem = (data: NewPromptFormValues) => {
-    const newPromptItem: Prompt = {
-      id: newId(),
-      name: data.promptName,
-      content: data.promptContent,
-      type: "prompt",
-      icon: FileText,
-      versions: 1,
-      isFavorite: false,
-      history: [],
-    };
-
-    let newPromptsList = [...prompts];
-    if (data.saveLocationType === "existing") {
-      if (data.selectedExistingFolderId && data.selectedExistingFolderId !== 'root') {
-        newPromptsList = addPromptToTree(prompts, data.selectedExistingFolderId, newPromptItem);
-      } else { // Adding to root if 'root' is selected or no folderId
-        newPromptsList = [...prompts, newPromptItem];
-      }
-    } else if (data.saveLocationType === "new") {
-      const newFolder: Prompt = {
-        id: newId(),
-        name: data.newFolderName!,
-        type: "folder",
-        icon: Folder,
-        children: [newPromptItem],
-        history: [], 
-        versions: 0, 
-      };
-      newPromptsList = addFolderToTree(prompts, data.newFolderParentId || 'root', newFolder);
-    }
-    setPrompts(newPromptsList);
-    setSelectedPrompt(newPromptItem); 
-    setIsNewPromptDialogOpen(false); 
-    toast({ title: "Success", description: `Prompt "${newPromptItem.name}" created successfully.` });
+    createPromptMutation.mutate({ values: data, itemType: 'prompt' }); // Simplified: assumes creating a prompt. Folder creation is separate or part of this flow.
   };
 
   const handleOpenEditPromptDialog = () => {
-    if (selectedPrompt && selectedPrompt.type === 'prompt') {
+    if (selectedItem && selectedItem.type === 'prompt') {
       setIsEditPromptDialogOpen(true);
     } else {
       toast({ title: "Error", description: "Please select a prompt to edit.", variant: "destructive" });
@@ -537,86 +510,74 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
   };
 
   const handleSaveChangesToPrompt = (newContent: string) => {
-    if (!selectedPrompt || selectedPrompt.id === null) {
-      toast({ title: "Error", description: "No prompt selected for editing.", variant: "destructive" });
-      return;
-    }
-
-    const updatedPrompts = updatePromptInTree(prompts, selectedPrompt.id, newContent);
-    setPrompts(updatedPrompts);
-
-    const findUpdated = (items: Prompt[], id: string): Prompt | null => {
-      for (const item of items) {
-        if (item.id === id) return item;
-        if (item.children) {
-          const foundInChildren = findUpdated(item.children, id);
-          if (foundInChildren) return foundInChildren;
-        }
-      }
-      return null;
-    };
-    const newlySelectedPrompt = findUpdated(updatedPrompts, selectedPrompt.id);
-    setSelectedPrompt(newlySelectedPrompt); 
-    
-    setIsEditPromptDialogOpen(false);
-    toast({ title: "Success", description: `Prompt "${selectedPrompt.name}" updated to version ${newlySelectedPrompt?.versions}.` });
+    if (!selectedItem || selectedItem.type !== 'prompt') return;
+    updatePromptMutation.mutate({ id: selectedItem.id, content: newContent, name: selectedItem.name, isFavorite: (selectedItem as ClientPrompt).isFavorite, folderId: (selectedItem as ClientPrompt).folderId });
   };
 
   const handleOpenVersionHistory = () => {
-    if (selectedPrompt && selectedPrompt.type === 'prompt') {
-      setPromptForHistory(selectedPrompt);
+    if (selectedItem && selectedItem.type === 'prompt') {
+      setPromptForHistory(selectedItem as ClientPrompt);
       setIsVersionHistoryDialogOpen(true);
     } else {
       toast({ title: "Error", description: "Please select a prompt to view its history.", variant: "destructive" });
     }
   };
+
+  const confirmDeletePrompt = (prompt: ClientPrompt) => {
+    setPromptToDelete(prompt);
+  };
+
+  const executeDeletePrompt = () => {
+    if (promptToDelete) {
+      deletePromptMutation.mutate(promptToDelete.id);
+    }
+  };
   
-  const handleBranchPrompt = () => {
-    if (!selectedPrompt || selectedPrompt.type !== 'prompt') {
-      toast({
-        title: "Cannot Branch",
-        description: "Please select a prompt to branch.",
-        variant: "destructive",
-      });
+  const handleBranchPrompt = async () => {
+    if (!selectedItem || selectedItem.type !== 'prompt' || !idToken) {
+      toast({ title: "Cannot Branch", description: "Please select a prompt and ensure you are logged in.", variant: "destructive" });
       return;
     }
+    const currentPrompt = selectedItem as ClientPrompt;
+    const branchedPromptName = `${currentPrompt.name} - Branch`;
   
-    const branchedPromptName = `${selectedPrompt.name} - Branch`;
-  
-    const newBranchedPrompt: Prompt = {
-      id: newId(),
+    const newBranchedPromptData: Omit<FirebasePrompt, 'id' | 'createdAt' | 'updatedAt' | 'versions' | 'history'> & { folderId: string | null } = {
+      userId: user!.uid,
       name: branchedPromptName,
-      type: "prompt",
-      icon: selectedPrompt.icon,
-      content: selectedPrompt.content,
-      versions: 1, // New branch starts at version 1
-      isFavorite: selectedPrompt.isFavorite, // Inherit favorite status
-      history: [], // New branch has no prior history
+      content: currentPrompt.content,
+      folderId: currentPrompt.folderId, // Branch in the same folder
+      isFavorite: currentPrompt.isFavorite,
     };
-  
-    const { updatedTree, success } = addPromptNextToSibling(prompts, selectedPrompt.id, newBranchedPrompt);
-  
-    if (success) {
-      setPrompts(updatedTree);
-      setSelectedPrompt(newBranchedPrompt); // Select the newly branched prompt
-      toast({
-        title: "Prompt Branched",
-        description: `Created branch: "${newBranchedPrompt.name}".`,
-      });
-    } else {
-      // Fallback: if sibling logic fails (e.g., prompt was somehow not in the tree), add to root.
-      const newPromptsList = [...prompts, newBranchedPrompt];
-      setPrompts(newPromptsList);
-      setSelectedPrompt(newBranchedPrompt);
-      toast({
-        title: "Prompt Branched (Root)",
-        description: `Created branch: "${newBranchedPrompt.name}" at the root level as fallback.`,
-        variant: "default",
-      });
+    
+    try {
+        // Simulate what createPromptMutation does for the payload part
+        const res = await fetch('/api/prompts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+            body: JSON.stringify(newBranchedPromptData),
+        });
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.error || `Failed to create branched prompt`);
+        }
+        const createdBranchedPrompt = await res.json();
+        queryClientHook.invalidateQueries({ queryKey: ['prompts', user?.uid] });
+        setSelectedItem(convertTimestamps(createdBranchedPrompt));
+        toast({ title: "Prompt Branched", description: `Created branch: "${createdBranchedPrompt.name}".` });
+
+    } catch (error: any) {
+        toast({ title: "Branching Error", description: error.message, variant: "destructive" });
     }
   };
 
   const sidebarWidth = "280px";
+
+  if (authLoading || (promptsLoading && foldersLoading && !promptsData && !foldersData)) { // Show loading if auth or initial data is loading
+    return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
+  }
+  if (promptsError || foldersError) {
+    return <div className="flex h-screen items-center justify-center text-destructive">Error loading data: {(promptsError || foldersError)?.message}</div>;
+  }
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -654,11 +615,11 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
               </SidebarMenuItem>
               
               <SidebarGroup>
-                <SidebarGroupLabel tooltip="Prompts" className="flex items-center">
-                  <BookOpen className="h-4 w-4 mr-2"/> Prompts
+                <SidebarGroupLabel tooltip="Prompts & Folders" className="flex items-center">
+                  <BookOpen className="h-4 w-4 mr-2"/> Items
                 </SidebarGroupLabel>
-                 {prompts.map((item) => (
-                  <PromptTreeItem key={item.id} item={item} level={0} onSelectPrompt={handleSelectPrompt} selectedPromptId={selectedPrompt?.id}/>
+                 {promptTree.map((item) => (
+                  <PromptTreeItem key={item.id} item={item} level={0} onSelectPromptOrFolder={handleSelectPromptOrFolder} selectedItemId={selectedItem?.id}/>
                 ))}
               </SidebarGroup>
 
@@ -678,28 +639,28 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="w-full justify-start p-2">
                 <Avatar className="h-8 w-8 mr-2">
-                  <AvatarImage src="https://picsum.photos/40/40?grayscale" alt="User Avatar" data-ai-hint="profile avatar" />
-                  <AvatarFallback>PV</AvatarFallback>
+                  <AvatarImage src="https://picsum.photos/40/40?grayscale" alt="User Avatar" data-ai-hint="profile avatar"/>
+                  <AvatarFallback>{user?.email?.substring(0,2).toUpperCase() || 'PV'}</AvatarFallback>
                 </Avatar>
                 <div className="truncate group-data-[collapsible=icon]:hidden">
-                  <p className="font-semibold text-sm">Prompt User</p>
-                  <p className="text-xs text-muted-foreground">user@promptverse.ai</p>
+                  <p className="font-semibold text-sm">{user?.displayName || user?.email?.split('@')[0] || "User"}</p>
+                  <p className="text-xs text-muted-foreground">{user?.email || "user@promptverse.ai"}</p>
                 </div>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="start" className="w-56 bg-popover">
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem> Profile</DropdownMenuItem> 
-              <DropdownMenuItem><Settings className="mr-2 h-4 w-4" /> Settings</DropdownMenuItem>
+              {/* <DropdownMenuItem> Profile</DropdownMenuItem>  */}
+              <DropdownMenuItem onClick={() => toast({ title: "Settings", description: "Settings page not yet implemented."})}><Settings className="mr-2 h-4 w-4" /> Settings</DropdownMenuItem>
               <DropdownMenuSeparator />
                <DropdownMenuItem onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
                 {theme === "dark" ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
                 Switch to {theme === "dark" ? "Light" : "Dark"} Mode
               </DropdownMenuItem>
-              <DropdownMenuItem><LifeBuoy className="mr-2 h-4 w-4" /> Help & Support</DropdownMenuItem>
+              {/* <DropdownMenuItem><LifeBuoy className="mr-2 h-4 w-4" /> Help & Support</DropdownMenuItem> */}
               <DropdownMenuSeparator />
-              <DropdownMenuItem>Log out</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleLogout}>Log out</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </SidebarFooter>
@@ -709,11 +670,16 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
         <header className="sticky top-0 z-10 flex items-center h-[72px] border-b bg-background px-6 shadow-sm">
           <div className="flex-1">
             <h2 className="text-2xl font-semibold">
-              {selectedPrompt ? selectedPrompt.name : "Dashboard"}
+              {selectedItem ? selectedItem.name : "Dashboard"}
             </h2>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => handleOpenOptimizerDialog(selectedPrompt?.content)}>
+             {selectedItem && selectedItem.type === 'prompt' && (
+              <Button variant="ghost" size="sm" onClick={() => confirmDeletePrompt(selectedItem as ClientPrompt)}>
+                <Trash2 className="mr-1 h-4 w-4" /> Delete
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={() => handleOpenOptimizerDialog(selectedItem?.type === 'prompt' ? (selectedItem as ClientPrompt).content : undefined)}>
               <Sparkles className="mr-2 h-4 w-4" /> Optimize
             </Button>
             <DropdownMenu>
@@ -744,31 +710,37 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
                 </DropdownMenuContent>
             </DropdownMenu>
             <Button size="sm" onClick={handleOpenNewPromptDialog}>
-              <PlusCircle className="mr-2 h-4 w-4" /> New Prompt
+              <PlusCircle className="mr-2 h-4 w-4" /> New
             </Button>
              <SidebarTrigger className="md:hidden" />
           </div>
         </header>
 
         <main className="flex-1 p-6">
-           {selectedPrompt && selectedPrompt.type === 'prompt' ? (
+           {selectedItem && selectedItem.type === 'prompt' ? (
             <div className="bg-card p-6 rounded-lg shadow">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-semibold">{selectedPrompt.name}</h3>
+                <h3 className="text-xl font-semibold">{selectedItem.name}</h3>
                 <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => handleOpenOptimizerDialog(selectedPrompt?.content)}><Sparkles className="mr-1 h-4 w-4" /> Optimize</Button>
-                  <Button variant="ghost" size="sm" onClick={handleOpenVersionHistory}><History className="mr-1 h-4 w-4" /> Versions ({selectedPrompt.versions || 0})</Button>
-                   <Button variant="ghost" size="sm" onClick={handleBranchPrompt} disabled={!selectedPrompt || selectedPrompt.type !== 'prompt'}><GitFork className="mr-1 h-4 w-4" /> Branch</Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleOpenOptimizerDialog((selectedItem as ClientPrompt).content)}><Sparkles className="mr-1 h-4 w-4" /> Optimize</Button>
+                  <Button variant="ghost" size="sm" onClick={handleOpenVersionHistory}><History className="mr-1 h-4 w-4" /> Versions ({(selectedItem as ClientPrompt).versions || 0})</Button>
+                   <Button variant="ghost" size="sm" onClick={handleBranchPrompt} disabled={!selectedItem || selectedItem.type !== 'prompt'}><GitFork className="mr-1 h-4 w-4" /> Branch</Button>
                 </div>
               </div>
               <Textarea
-                value={selectedPrompt.content ?? ""}
-                readOnly // Textarea is read-only by default here, edit is via dialog
+                value={(selectedItem as ClientPrompt).content ?? ""}
+                readOnly 
                 className="w-full min-h-[300px] p-4 font-code text-sm bg-background rounded-md border"
               />
                <div className="mt-4 flex justify-end">
-                <Button onClick={handleOpenEditPromptDialog}>Edit Prompt</Button>
+                <Button onClick={handleOpenEditPromptDialog}><Edit3 className="mr-2 h-4 w-4" />Edit Prompt</Button>
               </div>
+            </div>
+          ) : selectedItem && selectedItem.type === 'folder' ? (
+            <div className="bg-card p-6 rounded-lg shadow">
+              <h3 className="text-xl font-semibold mb-2">Folder: {selectedItem.name}</h3>
+              <p className="text-muted-foreground">Contains {(selectedItem as ClientFolder).children?.length || 0} item(s).</p>
+              {/* Add folder specific actions here if needed */}
             </div>
           ) : (
             children({ openNewPromptDialog: handleOpenNewPromptDialog, openOptimizerDialog: handleOpenOptimizerDialog })
@@ -776,21 +748,15 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
         </main>
       </SidebarInset>
       <CommandDialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
-         {/* DialogTitle and DialogDescription are added for accessibility, but visually hidden using sr-only */}
-        <DialogTitle className="sr-only">Command Menu</DialogTitle>
+        <ShadDialogTitle className="sr-only">Command Menu</ShadDialogTitle>
         <DialogDescription className="sr-only">Use this to search for prompts or execute commands.</DialogDescription>
         <CommandInput placeholder="Type a command or search..." />
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
           <CommandGroup heading="Suggestions">
             <CommandItem onSelect={() => { 
-                // Attempt to find a specific prompt for demonstration, adjust ID if needed
-                const demoPrompt = prompts.flatMap(p => 
-                    p.type === 'folder' && p.children ? 
-                    p.children.filter(c => c.id === '1-1' && c.type === 'prompt') : 
-                    (p.id === '1-1' && p.type === 'prompt' ? [p] : [])
-                ).flat()[0];
-                if(demoPrompt) { handleSelectPrompt(demoPrompt); }
+                const demoPrompt = promptsData?.find(p => p.name === "Ad Copy Generator");
+                if(demoPrompt) { handleSelectPromptOrFolder(demoPrompt); }
                 setIsSearchOpen(false); 
             }}>
                 <FileText className="mr-2 h-4 w-4" />
@@ -802,18 +768,16 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
             </CommandItem>
              <CommandItem onSelect={() => { handleOpenNewPromptDialog(); setIsSearchOpen(false); }}>
                 <PlusCircle className="mr-2 h-4 w-4" />
-                <span>Create New Prompt</span>
+                <span>Create New Item</span>
             </CommandItem>
           </CommandGroup>
           <CommandSeparator />
-          <CommandGroup heading="Prompts">
-             {prompts.flatMap(p => p.type === 'folder' && p.children ? 
-                p.children.filter(c => c.type === 'prompt') : 
-                (p.type === 'prompt' ? [p] : [])
-             ).map(prompt => (
-                 prompt && <CommandItem key={prompt.id} onSelect={() => { handleSelectPrompt(prompt); setIsSearchOpen(false); }}>
-                    {React.createElement(prompt.icon || FileText, {className: "mr-2 h-4 w-4"})}
-                    <span>{prompt.name}</span>
+          <CommandGroup heading="Prompts & Folders">
+             {promptTree.flatMap(item => item.type === 'folder' && (item as ClientFolder).children ? (item as ClientFolder).children! : [item] )
+             .map(item => (
+                 item && <CommandItem key={item.id} onSelect={() => { handleSelectPromptOrFolder(item); setIsSearchOpen(false); }}>
+                    {React.createElement(item.icon || (item.type === 'folder' ? FolderIcon : FileText), {className: "mr-2 h-4 w-4"})}
+                    <span>{item.name}</span>
                  </CommandItem>
              ))}
           </CommandGroup>
@@ -827,15 +791,17 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
       <NewPromptDialog 
         open={isNewPromptDialogOpen} 
         onOpenChange={setIsNewPromptDialogOpen}
-        allPrompts={prompts}
+        // Pass flat lists for populating selectors, tree is for display only in sidebar
+        allPrompts={promptsData || []} 
+        allFolders={foldersData || []}
         onCreate={handleCreateNewItem}
       />
-      {selectedPrompt && selectedPrompt.type === 'prompt' && (
+      {selectedItem && selectedItem.type === 'prompt' && (
         <EditPromptDialog
           open={isEditPromptDialogOpen}
           onOpenChange={setIsEditPromptDialogOpen}
-          promptName={selectedPrompt.name}
-          initialContent={selectedPrompt.content || ""}
+          promptName={selectedItem.name}
+          initialContent={(selectedItem as ClientPrompt).content || ""}
           onSave={handleSaveChangesToPrompt}
         />
       )}
@@ -843,7 +809,28 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
         open={isVersionHistoryDialogOpen}
         onOpenChange={setIsVersionHistoryDialogOpen}
         prompt={promptForHistory}
+        versions={versionsData || []} // Pass fetched versions
+        isLoading={versionsLoading}
       />
+      {promptToDelete && (
+        <AlertDialog open={!!promptToDelete} onOpenChange={() => setPromptToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the prompt
+                "{promptToDelete.name}" and all its versions.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setPromptToDelete(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={executeDeletePrompt} disabled={deletePromptMutation.isPending}>
+                {deletePromptMutation.isPending ? "Deleting..." : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </SidebarProvider>
   );
 }

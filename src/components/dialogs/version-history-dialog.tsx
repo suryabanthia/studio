@@ -13,57 +13,48 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type { Prompt, PromptVersion } from "@/components/layout/main-layout";
+import type { ClientPrompt, ClientPromptVersion } from "@/components/layout/main-layout";
 import { format } from 'date-fns';
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 interface VersionHistoryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  prompt: Prompt | null;
-  // onRevert?: (promptId: string, versionToRevertTo: PromptVersion) => void; // Future enhancement
+  prompt: ClientPrompt | null;
+  versions: ClientPromptVersion[]; 
+  isLoading: boolean;
 }
 
 export function VersionHistoryDialog({
   open,
   onOpenChange,
   prompt,
+  versions, // These are historical versions from the 'versions' subcollection
+  isLoading,
 }: VersionHistoryDialogProps) {
   if (!prompt) return null;
 
-  // Construct a list of all versions for display, including the current content as the latest version.
-  // History is assumed to be sorted descending by versionNumber.
-  const allDisplayVersions: PromptVersion[] = [];
+  // Create a list of all versions to display, including the current content as the latest.
+  const allDisplayVersions: (ClientPromptVersion & { isCurrent?: boolean })[] = [];
 
-  if (prompt.content !== undefined && prompt.versions !== undefined) {
-    // Add current version (the one in prompt.content)
-    // The timestamp for the current version is a bit conceptual here.
-    // It's the "latest" or when it became current. For mock data or if no history, might use an arbitrary old date.
-    // If history exists, its timestamp is effectively "now" or the time it was last saved.
-    let currentVersionTimestamp = new Date(); // Default to now
-    if (prompt.history && prompt.history.length > 0) {
-        // If there's history, the current content was established after the last historical item.
-        // This isn't perfectly accurate without a "lastModified" on the prompt itself.
-        // For display, this should be fine.
-    } else if (prompt.versions === 1) {
-        // If it's the first version, its timestamp can be an older "creation" time.
-        // This is hard to get from current data, so we use a placeholder.
-        // In a real app, prompts would have creation/modification timestamps.
-         currentVersionTimestamp = new Date(Date.now() - Math.random() * 10 * 24 * 60 * 60 * 1000); // Mock creation time
-    }
-
-
+  // Add current prompt content as the "latest" (current) version.
+  // Its versionNumber is `prompt.versions`.
+  if (prompt.content !== undefined) {
     allDisplayVersions.push({
-      versionNumber: prompt.versions,
+      id: `current-${prompt.id}`, // A unique key for React list
+      versionNumber: prompt.versions, // This is the current version number
       content: prompt.content,
-      timestamp: currentVersionTimestamp, 
+      timestamp: prompt.updatedAt, // Timestamp of when this content became current
+      userId: prompt.userId, 
+      isCurrent: true,
     });
   }
-
-  if (prompt.history) {
-    allDisplayVersions.push(...prompt.history);
-  }
   
-  // Deduplicate by versionNumber (just in case) and sort descending
+  // Add historical versions fetched from the API (these are already sorted by versionNumber desc by API)
+  // Their version numbers will be less than `prompt.versions`.
+  allDisplayVersions.push(...versions);
+  
+  // Ensure unique versions (though API should handle this mostly) and sort again for robustness
   const uniqueSortedVersions = Array.from(new Map(allDisplayVersions.map(v => [v.versionNumber, v])).values())
     .sort((a, b) => b.versionNumber - a.versionNumber);
 
@@ -73,30 +64,24 @@ export function VersionHistoryDialog({
         <DialogHeader>
           <DialogTitle>Version History: {prompt.name}</DialogTitle>
           <DialogDescription>
-            Review past versions of this prompt. The current version is at the top.
+            Review versions of this prompt. The current version is at the top.
           </DialogDescription>
         </DialogHeader>
         <ScrollArea className="flex-grow pr-4">
           <div className="space-y-4 py-4">
-            {uniqueSortedVersions.length > 0 ? (
-              uniqueSortedVersions.map((version, index) => (
-                <Card key={version.versionNumber} className="bg-background/80 shadow-md">
+            {isLoading ? (
+              <div className="flex justify-center items-center h-32">
+                <LoadingSpinner />
+              </div>
+            ) : uniqueSortedVersions.length > 0 ? (
+              uniqueSortedVersions.map((version) => (
+                <Card key={`${prompt.id}-v${version.versionNumber}`} className="bg-background/80 shadow-md">
                   <CardHeader className="py-3 px-4">
                     <div className="flex justify-between items-center">
                       <CardTitle className="text-md">
                         Version {version.versionNumber}
-                        {index === 0 && prompt.content !== undefined && " (Current)"}
+                        {version.isCurrent && " (Current)"}
                       </CardTitle>
-                       {/* Add Revert button for past versions - future enhancement
-                       {index !== 0 && onRevert && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => onRevert(prompt.id, version)}
-                        >
-                          Revert to this version
-                        </Button>
-                      )} */}
                     </div>
                     <CardDescription className="text-xs">
                       Saved on: {format(new Date(version.timestamp), "MMM d, yyyy 'at' h:mm a")}
@@ -112,7 +97,7 @@ export function VersionHistoryDialog({
                 </Card>
               ))
             ) : (
-              <p className="text-muted-foreground">No version history available for this prompt.</p>
+              <p className="text-muted-foreground text-center py-4">No version history available for this prompt.</p>
             )}
           </div>
         </ScrollArea>

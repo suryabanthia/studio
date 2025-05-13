@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useAuth } from "@/contexts/AuthContext"; 
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -25,7 +25,7 @@ export default function LoginPage() {
   const { toast } = useToast();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-
+  const [errorFromSubmit, setErrorFromSubmit] = React.useState<string | null>(null);
 
   const {
     register,
@@ -37,53 +37,46 @@ export default function LoginPage() {
 
   const onSubmit = async (data: LoginFormValues) => {
     setIsSubmitting(true);
-    setErrorFromSubmit(null); // Clear previous submit errors
+    setErrorFromSubmit(null);
     const { error } = await signIn({ email: data.email, password: data.password });
     setIsSubmitting(false);
 
     if (error) {
+      const errorMessage = error.message || "An unexpected error occurred. Please check your credentials or try again later.";
       toast({
         title: "Login Failed",
-        description: error.message || "An unexpected error occurred. Please ensure Supabase is configured correctly if this persists.",
+        description: errorMessage,
         variant: "destructive",
       });
-      setErrorFromSubmit(error.message);
+      setErrorFromSubmit(errorMessage);
     } else {
       toast({
         title: "Login Successful",
         description: "Welcome back!",
       });
-      router.push("/"); // Redirect to dashboard or desired page
+      router.push("/"); 
     }
   };
   
-  // Effect to handle redirection if user is already logged in
   React.useEffect(() => {
     if (user && !authLoading) {
       router.push("/");
     }
   }, [user, authLoading, router]);
 
-  // State to hold error message from submission to display it prominently if needed
-  const [errorFromSubmit, setErrorFromSubmit] = React.useState<string | null>(null);
-  
-  // Display authError from context if it's relevant (e.g., global Supabase issue)
   React.useEffect(() => {
-    if (authError && authError.message.includes("Supabase not configured")) {
+    if (authError) {
         toast({
-            title: "Service Notice",
-            description: "Authentication service is currently unavailable. Please try again later.",
-            variant: "default",
+            title: "Authentication Service Error",
+            description: authError.message || "An issue occurred with the authentication service.",
+            variant: "destructive",
         });
     }
   }, [authError, toast]);
 
-
-  if (authLoading) {
-    // Optional: Show a loading spinner for the whole page if initial auth check is ongoing
-    // return <div className="flex h-screen items-center justify-center">Loading...</div>;
+  if (authLoading && !user) { // Show loading only if not already logged in and navigating
+    // return <div className="flex h-screen items-center justify-center">Loading authentication state...</div>;
   }
-
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
@@ -101,7 +94,7 @@ export default function LoginPage() {
                 {errorFromSubmit}
               </p>
             )}
-             {authError && authError.message.includes("Supabase not configured") && (
+             {authError && authError.message.includes("Firebase not configured") && (
                 <p className="text-sm text-center font-medium text-destructive bg-destructive/10 p-3 rounded-md">
                     Authentication is currently unavailable. Please ensure the application is configured correctly.
                 </p>
@@ -116,7 +109,7 @@ export default function LoginPage() {
               <Input id="password" type="password" {...register("password")} placeholder="••••••••" className="bg-input"/>
               {errors.password && <p className="text-sm text-destructive mt-1">{errors.password.message}</p>}
             </div>
-            <Button type="submit" className="w-full" disabled={isSubmitting || authLoading || (authError && authError.message.includes("Supabase not configured"))}>
+            <Button type="submit" className="w-full" disabled={isSubmitting || authLoading || (!!authError && authError.message.includes("Firebase not configured"))}>
               {isSubmitting ? "Signing In..." : "Sign In"}
             </Button>
           </form>

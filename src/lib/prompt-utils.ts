@@ -1,44 +1,83 @@
-import type { Prompt, PromptVersion } from '@/components/layout/main-layout';
+import type { ClientPrompt, ClientFolder, FirebasePromptVersion } from '@/components/layout/main-layout'; // Assuming these are defined in main-layout or a types file
+import { Timestamp } from 'firebase/firestore'; // Import if needed for type consistency, though client types use Date
 
 export const newId = () => `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
 export interface FolderOption {
-  value: string;
+  value: string; // Folder ID or 'root'
   label: string;
 }
 
+// Generates folder options for select dropdowns, using ClientFolder type
 export function generateFolderOptions(
-  items: Prompt[],
-  prefix = '',
-  includeRootOption = false,
-  promptIdToExclude?: string
+  folders: ClientFolder[],
+  currentFolderIdToExclude?: string // To prevent selecting a folder as its own parent
 ): FolderOption[] {
-  let options: FolderOption[] = [];
-  if (includeRootOption) {
-    options.push({ value: 'root', label: 'No Parent (Root Level)' });
-  }
+  let options: FolderOption[] = [{ value: 'root', label: 'Root Level (No Parent)' }];
 
-  items.forEach(item => {
-    if (item.id === promptIdToExclude) return;
-
-    if (item.type === 'folder') {
-      const currentLabel = prefix ? `${prefix} > ${item.name}` : item.name;
-      options.push({ value: item.id, label: currentLabel });
-      if (item.children) {
-        options = options.concat(
-          generateFolderOptions(item.children, currentLabel, false, promptIdToExclude)
-        );
-      }
-    }
+  // Simple flat list for now. For nested display in dropdown, this would need recursion.
+  folders.forEach(folder => {
+    if (folder.id === currentFolderIdToExclude) return;
+    options.push({ value: folder.id, label: folder.name });
   });
   return options;
 }
 
+
+// Builds a tree structure from flat lists of prompts and folders
+export function buildPromptTree(prompts: ClientPrompt[], folders: ClientFolder[]): (ClientPrompt | ClientFolder)[] {
+  const itemMap = new Map<string, ClientPrompt | ClientFolder & { children?: (ClientPrompt | ClientFolder)[] }>();
+  
+  folders.forEach(folder => itemMap.set(folder.id, { ...folder, type: 'folder', children: [] }));
+  prompts.forEach(prompt => itemMap.set(prompt.id, { ...prompt, type: 'prompt' }));
+
+  const tree: (ClientPrompt | ClientFolder)[] = [];
+
+  itemMap.forEach(item => {
+    const parentId = item.type === 'folder' ? (item as ClientFolder).parentId : (item as ClientPrompt).folderId;
+    if (parentId && itemMap.has(parentId)) {
+      const parent = itemMap.get(parentId) as ClientFolder & { children?: (ClientPrompt | ClientFolder)[] };
+      if (parent.type === 'folder') { // Ensure parent is indeed a folder
+        parent.children = parent.children || [];
+        parent.children.push(item);
+      } else { // Should not happen if data is consistent
+        tree.push(item); 
+      }
+    } else {
+      tree.push(item); // Root item
+    }
+  });
+  
+  // Sort children alphabetically by name for both folders and prompts within folders
+  itemMap.forEach(item => {
+    if (item.type === 'folder' && (item as ClientFolder & { children?: any[] }).children) {
+      (item as ClientFolder & { children?: any[] }).children?.sort((a, b) => a.name.localeCompare(b.name));
+    }
+  });
+  // Sort root items
+  tree.sort((a, b) => {
+    if (a.type === 'folder' && b.type === 'prompt') return -1;
+    if (a.type === 'prompt' && b.type === 'folder') return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  return tree;
+}
+
+
+// The following functions (addPromptToTree, addFolderToTree, updatePromptInTree, addPromptNextToSibling)
+// were for client-side state manipulation. With a backend, these operations
+// should primarily be handled by API calls and then re-fetching/invalidating queries.
+// They might still be useful for optimistic updates or specific client-side scenarios,
+// but their role changes. For now, they are kept but might need adaptation
+// if used for optimistic updates with Firebase data.
+
 export function addPromptToTree(
-  tree: Prompt[],
+  tree: ClientPrompt[],
   targetFolderId: string,
-  promptToAdd: Prompt
-): Prompt[] {
+  promptToAdd: ClientPrompt
+): ClientPrompt[] {
+  // This function assumes tree contains items of ClientPrompt or ClientFolder type
   return tree.map(item => {
     if (item.id === targetFolderId && item.type === 'folder') {
       return {
@@ -49,18 +88,18 @@ export function addPromptToTree(
     if (item.children) {
       return {
         ...item,
-        children: addPromptToTree(item.children, targetFolderId, promptToAdd),
+        children: addPromptToTree(item.children as ClientPrompt[], targetFolderId, promptToAdd),
       };
     }
     return item;
-  });
+  }) as ClientPrompt[];
 }
 
 export function addFolderToTree(
-  tree: Prompt[],
+  tree: (ClientPrompt | ClientFolder)[],
   parentId: string | 'root',
-  folderToAdd: Prompt
-): Prompt[] {
+  folderToAdd: ClientFolder
+): (ClientPrompt | ClientFolder)[] {
   if (parentId === 'root') {
     return [...tree, folderToAdd];
   }
@@ -68,75 +107,105 @@ export function addFolderToTree(
     if (item.id === parentId && item.type === 'folder') {
       return {
         ...item,
-        children: [...(item.children || []), folderToAdd],
+        children: [...((item as ClientFolder).children || []), folderToAdd],
       };
     }
-    if (item.children) {
+    if ((item as ClientFolder).children) {
       return {
         ...item,
-        children: addFolderToTree(item.children, parentId, folderToAdd),
+        children: addFolderToTree((item as ClientFolder).children!, parentId, folderToAdd),
       };
     }
     return item;
   });
 }
 
+// This function's logic for versioning is now handled by the backend.
+// If used for optimistic updates, it would need to reflect the expected backend state.
 export function updatePromptInTree(
-  items: Prompt[],
+  items: ClientPrompt[],
   targetId: string,
   newContent: string
-): Prompt[] {
-  return items.map(item => {
-    if (item.id === targetId && item.type === 'prompt' && item.content !== undefined) {
-      const previousVersionNumber = item.versions || 1; 
-      const newHistoryEntry: PromptVersion = {
-        versionNumber: previousVersionNumber,
-        content: item.content, // Store the old content
-        timestamp: new Date(), // Timestamp of when this old version was superseded
-      };
-      return {
+): ClientPrompt[] {
+   return items.map(item => {
+    if (item.id === targetId && item.type === 'prompt') {
+      // Optimistic update: reflect new content and assume backend increments version
+      const updatedPrompt = {
         ...item,
-        content: newContent, // New content becomes current
-        versions: previousVersionNumber + 1, // Increment total versions
-        history: [...(item.history || []), newHistoryEntry].sort((a,b) => b.versionNumber - a.versionNumber), // Add to history and keep sorted
+        content: newContent,
+        versions: (item.versions || 0) + 1, // Optimistically increment
+        updatedAt: new Date(), // Optimistically set updatedAt
+        // History update is complex for optimistic; backend handles actual history creation.
       };
+      return updatedPrompt;
     }
     if (item.children) {
       return {
         ...item,
-        children: updatePromptInTree(item.children, targetId, newContent),
+        children: updatePromptInTree(item.children as ClientPrompt[], targetId, newContent),
       };
     }
     return item;
-  });
+  }) as ClientPrompt[];
 }
 
+
+export function findPromptInTree(items: (ClientPrompt | ClientFolder)[], promptId: string): ClientPrompt | null {
+  for (const item of items) {
+    if (item.id === promptId && item.type === 'prompt') {
+      return item as ClientPrompt;
+    }
+    if (item.type === 'folder' && (item as ClientFolder).children) {
+      const found = findPromptInTree((item as ClientFolder).children!, promptId);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+export function findItemPath(items: (ClientPrompt | ClientFolder)[], itemId: string, currentPath: string[] = []): string[] | null {
+    for (const item of items) {
+        const newPath = [...currentPath, item.name];
+        if (item.id === itemId) {
+            return newPath;
+        }
+        if (item.type === 'folder' && (item as ClientFolder).children) {
+            const foundPath = findItemPath((item as ClientFolder).children!, itemId, newPath);
+            if (foundPath) {
+                return foundPath;
+            }
+        }
+    }
+    return null;
+}
+
+// This function might be less relevant if branching creates a new root-level item or is handled server-side.
 export function addPromptNextToSibling(
-  items: Prompt[],
+  items: (ClientPrompt | ClientFolder)[],
   siblingId: string,
-  promptToAdd: Prompt
-): { updatedTree: Prompt[]; success: boolean } {
-  // Check at the current level
+  promptToAdd: ClientPrompt
+): { updatedTree: (ClientPrompt | ClientFolder)[]; success: boolean } {
   for (let i = 0; i < items.length; i++) {
     if (items[i].id === siblingId) {
       const newItems = [...items];
-      newItems.splice(i + 1, 0, promptToAdd); // Insert after the sibling
+      newItems.splice(i + 1, 0, promptToAdd);
       return { updatedTree: newItems, success: true };
     }
   }
 
-  // If not found at the current level, recursively search in children of folders
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
-    if (item.type === 'folder' && item.children) {
-      const result = addPromptNextToSibling(item.children, siblingId, promptToAdd);
+    if (item.type === 'folder' && (item as ClientFolder).children) {
+      const result = addPromptNextToSibling((item as ClientFolder).children!, siblingId, promptToAdd);
       if (result.success) {
         const newItems = [...items];
-        newItems[i] = { ...item, children: result.updatedTree };
+        (newItems[i] as ClientFolder).children = result.updatedTree;
         return { updatedTree: newItems, success: true };
       }
     }
   }
-
-  return { updatedTree: items, success: false }; // Sibling not found
+  return { updatedTree: items, success: false };
 }
+
+// Firestore doesn't store functions, so remove icon from server-side types if they existed there.
+// Client-side types can still have `icon` for UI.

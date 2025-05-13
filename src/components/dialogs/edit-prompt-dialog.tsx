@@ -19,7 +19,8 @@ interface EditPromptDialogProps {
   onOpenChange: (open: boolean) => void;
   promptName: string;
   initialContent: string;
-  onSave: (newContent: string) => void;
+  onSave: (newContent: string) => void; // Backend will handle versioning
+  isSaving?: boolean;
 }
 
 export function EditPromptDialog({
@@ -28,6 +29,7 @@ export function EditPromptDialog({
   promptName,
   initialContent,
   onSave,
+  isSaving = false,
 }: EditPromptDialogProps) {
   const [content, setContent] = React.useState(initialContent);
   const { toast } = useToast();
@@ -36,34 +38,7 @@ export function EditPromptDialog({
     if (open) {
       setContent(initialContent); 
     }
-    // By depending only on `open`, we set the content when the dialog opens.
-    // `initialContent` is captured from the closure at that time.
-    // This prevents changes to `initialContent` prop from resetting the state while the dialog is open and user is typing.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  // If you need initialContent to be reactive while the dialog is open (e.g., parent changes it),
-  // then initialContent should be in the dependency array. But for typical edit dialogs,
-  // snapshotting on open is often preferred to protect user input.
-  // If initialContent IS intended to be reactive, then the "can't type" issue source is different.
-  // For now, assuming snapshot on open is the desired behavior to fix typing.
-  React.useEffect(() => {
-    // This secondary effect ensures that if `initialContent` prop itself changes
-    // (e.g. user selects a different item to edit without closing dialog, though not current UX)
-    // the local state `content` will update IF the dialog is already open.
-    // However, for the primary use case of typing, the effect above tied to `open` is key.
-    // This specific effect ensures that if `initialContent` changes for an *already open* dialog, it updates.
-    // This might be too aggressive if parent re-renders pass a new `initialContent` reference for the same logical data.
-    // So, let's ensure we only reset if `initialContent` truly changes for an open dialog and is different from current editing state.
-    if (open) {
-        // Only update if the prop truly differs from what was last set via prop
-        // This is a bit more nuanced. The primary effect on `open` should handle initial set.
-        // This one handles "external" changes to initialContent while dialog is open.
-        // Let's stick to the simpler model for now: snapshot on open.
-        // setContent(initialContent); // Re-evaluating if this specific effect is needed with the one above.
-                                  // The one above should be sufficient if initialContent passed on open is stable.
-    }
-  }, [initialContent, open]);
+  }, [open, initialContent]);
 
 
   const handleSave = () => {
@@ -75,6 +50,8 @@ export function EditPromptDialog({
       });
       return;
     }
+    // Backend will handle creating a new version entry.
+    // The `versions` count on the prompt document will be incremented by the backend.
     onSave(content);
   };
 
@@ -84,7 +61,7 @@ export function EditPromptDialog({
         <DialogHeader>
           <DialogTitle>Edit Prompt: {promptName}</DialogTitle>
           <DialogDescription>
-            Modify the content of your prompt below. Saving will create a new version.
+            Modify the content of your prompt below. Saving will update the prompt and record this change in its version history.
           </DialogDescription>
         </DialogHeader>
         <div className="py-4 space-y-2">
@@ -102,14 +79,10 @@ export function EditPromptDialog({
             type="button"
             variant="outline"
             onClick={() => onOpenChange(false)}
+            disabled={isSaving}
           >
             Cancel
           </Button>
-          <Button type="button" onClick={handleSave}>
-            Save Changes
+          <Button type="button" onClick={handleSave} disabled={isSaving}>
+            {isSaving ? "Saving..." : "Save Changes"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}

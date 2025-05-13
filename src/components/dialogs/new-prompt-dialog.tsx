@@ -24,41 +24,34 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
-import type { Prompt } from "@/components/layout/main-layout";
-import { generateFolderOptions, type FolderOption } from "@/lib/prompt-utils";
+// Removed useToast as it's not used here directly, parent handles toasts.
+import type { ClientPrompt, ClientFolder } from "@/components/layout/main-layout"; 
+import { generateFolderOptions } from "@/lib/prompt-utils";
+
 
 const newPromptFormSchema = z.object({
   promptName: z.string().min(1, "Prompt name is required."),
   promptContent: z.string().min(1, "Prompt content is required."),
   saveLocationType: z.enum(["existing", "new"]),
-  selectedExistingFolderId: z.string().optional(),
+  selectedExistingFolderId: z.string().optional(), 
   newFolderName: z.string().optional(),
-  newFolderParentId: z.string().optional(), // 'root' or folderId
+  newFolderParentId: z.string().optional(), 
 }).refine(data => {
   if (data.saveLocationType === "existing") {
-    return !!data.selectedExistingFolderId;
+    return !!data.selectedExistingFolderId; 
   }
   return true;
 }, {
-  message: "Please select an existing folder.",
+  message: "Please select an existing folder or root.",
   path: ["selectedExistingFolderId"],
 }).refine(data => {
   if (data.saveLocationType === "new") {
-    return !!data.newFolderName;
+    return !!data.newFolderName && !!data.newFolderParentId;
   }
   return true;
 }, {
-  message: "New folder name is required.",
-  path: ["newFolderName"],
-}).refine(data => {
-  if (data.saveLocationType === "new") {
-    return !!data.newFolderParentId;
-  }
-  return true;
-}, {
-  message: "Please select a parent for the new folder.",
-  path: ["newFolderParentId"],
+  message: "New folder name and its parent location are required.",
+  path: ["newFolderName"], 
 });
 
 export type NewPromptFormValues = z.infer<typeof newPromptFormSchema>;
@@ -66,57 +59,67 @@ export type NewPromptFormValues = z.infer<typeof newPromptFormSchema>;
 interface NewPromptDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  allPrompts: Prompt[]; // Used to populate folder selectors
+  allPrompts: ClientPrompt[]; 
+  allFolders: ClientFolder[]; 
   onCreate: (data: NewPromptFormValues) => void;
+  isCreating?: boolean; 
 }
 
-export function NewPromptDialog({ open, onOpenChange, allPrompts, onCreate }: NewPromptDialogProps) {
-  const { toast } = useToast();
+export function NewPromptDialog({ 
+    open, 
+    onOpenChange, 
+    allFolders, 
+    onCreate,
+    isCreating = false 
+}: NewPromptDialogProps) {
   const {
     control,
     register,
     handleSubmit,
     watch,
     reset,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting: formIsSubmitting }, 
   } = useForm<NewPromptFormValues>({
     resolver: zodResolver(newPromptFormSchema),
     defaultValues: {
       promptName: "",
       promptContent: "",
       saveLocationType: "existing",
+      selectedExistingFolderId: "root", 
+      newFolderName: "",
+      newFolderParentId: "root", 
     },
   });
 
   const saveLocationType = watch("saveLocationType");
 
-  // Memoize options based on allPrompts
-  const existingFolderOptions = React.useMemo(() => generateFolderOptions(allPrompts), [allPrompts]);
-  const newFolderParentOptions = React.useMemo(() => generateFolderOptions(allPrompts, '', true), [allPrompts]);
+  const existingFolderOptionsForPrompt = React.useMemo(() => {
+      const options = allFolders.map(f => ({ value: f.id, label: f.name }));
+      return [{ value: 'root', label: 'Root Level (No Folder)' }, ...options];
+  }, [allFolders]);
+
+  const parentFolderOptionsForNewFolder = React.useMemo(() => {
+      const options = allFolders.map(f => ({ value: f.id, label: f.name }));
+      return [{ value: 'root', label: 'Root Level (Top Level Folder)' }, ...options];
+  }, [allFolders]);
+
 
   const onSubmit = (data: NewPromptFormValues) => {
     onCreate(data);
-    // Toast and reset are handled by the `useEffect` reacting to `open` state or by parent.
-    // For now, let's keep toast here, but reset is tricky with external open control.
-    // Parent will close dialog via onOpenChange(false) which then triggers reset via useEffect.
   };
   
   React.useEffect(() => {
     if (open) {
-      // Re-calculate options here based on potentially updated allPrompts when dialog opens
-      const currentExistingFolderOptions = generateFolderOptions(allPrompts);
-      const currentNewFolderParentOptions = generateFolderOptions(allPrompts, '', true);
       reset({ 
         promptName: "",
         promptContent: "",
-        saveLocationType: currentExistingFolderOptions.length > 0 ? "existing" : "new",
-        selectedExistingFolderId: currentExistingFolderOptions.length > 0 ? currentExistingFolderOptions[0]?.value : undefined,
-        newFolderName: "", // Always clear new folder name
-        newFolderParentId: currentNewFolderParentOptions.length > 0 ? currentNewFolderParentOptions[0]?.value : 'root',
+        saveLocationType: existingFolderOptionsForPrompt.length > 1 ? "existing" : "new",
+        selectedExistingFolderId: "root",
+        newFolderName: "",
+        newFolderParentId: "root",
       });
     }
-  }, [open, reset, allPrompts]); // allPrompts is needed to correctly calculate options on open.
-                                 // If allPrompts changes while open, form won't reset, protecting input.
+  }, [open, reset, existingFolderOptionsForPrompt]);
 
 
   return (
@@ -142,7 +145,7 @@ export function NewPromptDialog({ open, onOpenChange, allPrompts, onCreate }: Ne
           </div>
 
           <div className="space-y-2">
-            <Label>Save Location</Label>
+            <Label>Save Location for Prompt</Label>
             <Controller
               name="saveLocationType"
               control={control}
@@ -153,9 +156,9 @@ export function NewPromptDialog({ open, onOpenChange, allPrompts, onCreate }: Ne
                   className="flex space-x-4"
                 >
                   <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="existing" id="existing" disabled={existingFolderOptions.length === 0}/>
-                    <Label htmlFor="existing" className={existingFolderOptions.length === 0 ? "text-muted-foreground" : ""}>
-                      Existing Folder {existingFolderOptions.length === 0 && "(None available)"}
+                    <RadioGroupItem value="existing" id="existing" />
+                    <Label htmlFor="existing">
+                      Existing Folder (or Root)
                     </Label>
                   </div>
                   <div className="flex items-center space-x-2">
@@ -167,19 +170,19 @@ export function NewPromptDialog({ open, onOpenChange, allPrompts, onCreate }: Ne
             />
           </div>
 
-          {saveLocationType === "existing" && existingFolderOptions.length > 0 && (
+          {saveLocationType === "existing" && (
             <div>
-              <Label htmlFor="selectedExistingFolderId">Select Folder</Label>
+              <Label htmlFor="selectedExistingFolderId">Select Folder for Prompt</Label>
               <Controller
                 name="selectedExistingFolderId"
                 control={control}
                 render={({ field }) => (
-                  <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value || undefined}>
+                  <Select onValueChange={field.onChange} value={field.value || "root"}>
                     <SelectTrigger className="w-full mt-1 bg-background">
-                      <SelectValue placeholder="Select an existing folder" />
+                      <SelectValue placeholder="Select folder or root" />
                     </SelectTrigger>
                     <SelectContent>
-                      {existingFolderOptions.map((option) => (
+                      {existingFolderOptionsForPrompt.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
                         </SelectItem>
@@ -200,18 +203,17 @@ export function NewPromptDialog({ open, onOpenChange, allPrompts, onCreate }: Ne
                 {errors.newFolderName && <p className="text-sm text-destructive mt-1">{errors.newFolderName.message}</p>}
               </div>
               <div>
-                <Label htmlFor="newFolderParentId">Parent of New Folder</Label>
+                <Label htmlFor="newFolderParentId">Parent for New Folder</Label>
                  <Controller
                     name="newFolderParentId"
                     control={control}
-                    defaultValue="root" 
                     render={({ field }) => (
                     <Select onValueChange={field.onChange} value={field.value || 'root'}>
                         <SelectTrigger className="w-full mt-1 bg-background">
-                        <SelectValue placeholder="Select parent folder" />
+                        <SelectValue placeholder="Select parent for new folder" />
                         </SelectTrigger>
                         <SelectContent>
-                        {newFolderParentOptions.map((option) => (
+                        {parentFolderOptionsForNewFolder.map((option) => (
                             <SelectItem key={option.value} value={option.value}>
                             {option.label}
                             </SelectItem>
@@ -226,13 +228,10 @@ export function NewPromptDialog({ open, onOpenChange, allPrompts, onCreate }: Ne
           )}
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => { onOpenChange(false); /* Reset is handled by useEffect on 'open' change */ }}>Cancel</Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Creating..." : "Create Prompt"}
+            <Button type="button" variant="outline" onClick={() => { onOpenChange(false); }} disabled={isCreating || formIsSubmitting}>Cancel</Button>
+            <Button type="submit" disabled={isCreating || formIsSubmitting}>
+              {isCreating || formIsSubmitting ? "Creating..." : "Create Prompt"}
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
+      </Dialog
