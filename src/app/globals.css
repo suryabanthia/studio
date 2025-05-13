@@ -4,101 +4,101 @@
 
 @layer base {
   :root {
-    /* Light Mode - Inspired by Sunset Palette but lighter */
-    --background: 210 30% 98%; /* Very light blue-gray: #F8FAFC */
-    --foreground: 210 29% 24%; /* Dark slate blue text: #2C3E50 */
+    /* Wildflowers Light Mode Palette */
+    --background: 0 0% 100%; /* White */
+    --foreground: 215 62% 11%; /* Dark Blue/Black #0F172A (Text on Light) */
 
-    --card: 0 0% 100%; /* White */
-    --card-foreground: 210 29% 24%; /* Dark slate blue text */
+    --card: 210 30% 98%; /* Light Surface #F8FAFC */
+    --card-foreground: 215 62% 11%; /* Dark Text on Card */
 
-    --popover: 0 0% 100%; /* White */
-    --popover-foreground: 210 29% 24%; /* Dark slate blue text */
+    --popover: 210 30% 98%; /* Light Surface #F8FAFC */
+    --popover-foreground: 215 62% 11%; /* Dark Text on Popover */
 
-    --primary: 208 41% 45%; /* Lighter Blue: #4A7BA8 */
+    --primary: 123 30% 46%; /* Dark Green #519755 */
     --primary-foreground: 0 0% 100%; /* White */
 
-    --secondary: 287 16% 52%; /* Lighter Purple: #897891 */
-    --secondary-foreground: 0 0% 100%; /* White */
+    --secondary: 300 27% 66%; /* Light Purple #BE91BE */
+    --secondary-foreground: 215 62% 11%; /* Dark text for contrast */
 
-    --muted: 210 25% 90%; /* Light grayish blue: #E0E7EF */
-    --muted-foreground: 210 25% 55%; /* Darker muted text: #7889A1 */
+    --muted: 123 48% 92%; /* Very Light Green (from #A8DCAB) */
+    --muted-foreground: 123 30% 35%; /* Darker Green for text on muted */
 
-    --accent: 354 100% 65%; /* Lighter Coral: #FF6372 */
-    --accent-foreground: 0 0% 100%; /* White */
+    --accent: 5 42% 76%; /* Light Pink #DBAAA7 */
+    --accent-foreground: 215 62% 11%; /* Dark text for contrast */
 
-    --destructive: 0 84.2% 60.2%; /* Default shadcn destructive */
+    --destructive: 0 84.2% 60.2%; /* Default shadcn destructive red */
     --destructive-foreground: 0 0% 98%; /* Default shadcn destructive-foreground */
     
-    --border: 210 20% 85%; /* Light gray-blue border: #CBD5E1 */
-    --input: 210 20% 85%; /* Light gray-blue input border */
-    --ring: 208 41% 45%; /* Primary color for focus rings */
+    --border: 123 30% 85%; /* Light grayish green (from #A8DCAB) */
+    --input: 123 30% 85%; /* Light grayish green (from #A8DCAB) */
+    --ring: 123 30% 46%; /* Primary (Dark Green #519755) for focus rings */
 
     --radius: 0.5rem;
 
     /* Chart Colors - Light */
-    --chart-1: 208 41% 45%; /* Primary */
-    --chart-2: 354 100% 65%; /* Accent */
-    --chart-3: 287 16% 52%; /* Secondary */
-    --chart-4: 340 42% 70%; /* Lighter Pink: #D98FAA */
-    --chart-5: 208 41% 65%; /* Even Lighter Blue */
+    --chart-1: 123 30% 46%; /* Primary - Dark Green */
+    --chart-2: 5 42% 76%;   /* Accent - Light Pink */
+    --chart-3: 300 27% 66%; /* Secondary - Light Purple */
+    --chart-4: 123 48% 76%; /* Light Green #A8DCAB */
+    --chart-5: 123 30% 65%; /* Lighter Dark Green */
 
     /* Sidebar Colors - Light */
-    --sidebar-background: 210 30% 96%; /* Off-white/light blue: #F0F4F8 */
-    --sidebar-foreground: 210 29% 24%; /* Dark slate blue text */
-    --sidebar-primary: 208 41% 45%; /* Active item uses light primary */
+    --sidebar-background: 123 48% 96%;       /* Very Pale Light Green */
+    --sidebar-foreground: 215 62% 11%;       /* Dark Text */
+    --sidebar-primary: 123 30% 46%;          /* Primary - Dark Green */
     --sidebar-primary-foreground: 0 0% 100%; /* White */
-    --sidebar-accent: 210 20% 90%; /* Hover items: #E2E8F0 */
-    --sidebar-accent-foreground: 210 29% 24%; /* Dark text on hover */
-    --sidebar-border: 210 20% 80%; /* #BCCCDC */
-    --sidebar-ring: 208 41% 45%; /* Primary color for focus rings */
+    --sidebar-accent: 123 48% 90%;           /* Hover - Slightly Darker Pale Light Green */
+    --sidebar-accent-foreground: 123 30% 35%;/* Dark Green text on hover */
+    --sidebar-border: 123 30% 88%;           /* Light Green Border */
+    --sidebar-ring: 123 30% 46%;             /* Primary Ring */
   }
 
   .dark {
-    /* Dark Mode - Based on "Sunset" Palette */
-    --background: 210 29% 24%; /* Dark Slate Blue: #2C3E50 (Image BG) */
-    --foreground: 210 25% 92%; /* Off-white text */
+    /* Wildflowers Dark Mode Palette */
+    --background: 215 62% 11%; /* Dark Blue/Black #0F172A */
+    --foreground: 210 40% 96%; /* Light Gray/Off-white #F1F5F9 (Text on Dark) */
 
-    --card: 210 29% 28%; /* Slightly lighter than background: #34495E */
-    --card-foreground: 210 25% 92%; /* Off-white text */
+    --card: 210 38% 17%; /* Dark Surface #1E293B */
+    --card-foreground: 210 40% 96%; /* Light Text on Card */
 
-    --popover: 210 29% 20%; /* Slightly darker than background: #233546 */
-    --popover-foreground: 210 25% 92%; /* Off-white text */
+    --popover: 210 38% 15%; /* Slightly Darker Surface */
+    --popover-foreground: 210 40% 96%; /* Light Text on Popover */
 
-    --primary: 208 41% 35%; /* Dark Blue from palette: #355C7D */
-    --primary-foreground: 0 0% 100%; /* White */
+    --primary: 123 30% 55%; /* Dark Green #519755 (adjusted for dark mode) */
+    --primary-foreground: 123 50% 95%; /* Very Light Green */
 
-    --secondary: 287 16% 42%; /* Muted Purple from palette: #725A7A */
-    --secondary-foreground: 0 0% 100%; /* White */
+    --secondary: 300 27% 66%; /* Light Purple #BE91BE (already light) */
+    --secondary-foreground: 0 0% 100%; /* White text for contrast */
 
-    --muted: 210 25% 40%; /* Muted gray-blue: #526373 */
-    --muted-foreground: 210 20% 70%; /* Light gray text: #A8B3BF */
+    --muted: 123 25% 20%; /* Dark, Desaturated Green (from #A8DCAB) */
+    --muted-foreground: 123 35% 70%; /* Medium Light Green for text on muted */
 
-    --accent: 354 100% 73%; /* Coral Pink from palette: #FF7582 */
-    --accent-foreground: 210 29% 15%; /* Dark text on accent: e.g. #1C2A3A */
+    --accent: 5 42% 76%; /* Light Pink #DBAAA7 (already light) */
+    --accent-foreground: 215 62% 11%; /* Dark text for contrast on light pink */
     
     --destructive: 0 72% 51%; /* Bright Red */
     --destructive-foreground: 0 0% 98%; /* Light text on destructive */
 
-    --border: 210 29% 32%; /* Subtle border: #3E566F */
-    --input: 210 29% 32%; /* Input border */
-    --ring: 354 100% 73%; /* Accent color for focus rings */
+    --border: 123 20% 30%; /* Dark Green Border (from #A8DCAB) */
+    --input: 123 20% 30%; /* Dark Green Border (from #A8DCAB) */
+    --ring: 123 30% 55%; /* Primary (Dark Green adjusted) for focus rings */
     
     /* Chart Colors - Dark */
-    --chart-1: 208 41% 35%; /* Blue: #355C7D */
-    --chart-2: 354 100% 73%; /* Coral: #FF7582 */
-    --chart-3: 287 16% 42%; /* Purple: #725A7A */
-    --chart-4: 340 42% 60%; /* Pink: #C56C86 */
-    --chart-5: 208 41% 55%; /* Lighter Blue */
+    --chart-1: 123 30% 55%; /* Primary - Dark Green (DM) */
+    --chart-2: 5 42% 76%;   /* Accent - Light Pink */
+    --chart-3: 300 27% 66%; /* Secondary - Light Purple */
+    --chart-4: 123 48% 66%; /* Light Green #A8DCAB (adjusted for DM) */
+    --chart-5: 123 30% 75%; /* Lighter Dark Green (adjusted for DM) */
 
     /* Sidebar Colors - Dark */
-    --sidebar-background: 210 29% 20%; /* Darker than main bg: #233546 */
-    --sidebar-foreground: 210 20% 88%; /* Light gray text */
-    --sidebar-primary: 354 100% 73%; /* Active item uses accent: #FF7582 */
-    --sidebar-primary-foreground: 210 29% 15%; /* Dark text on active item */
-    --sidebar-accent: 210 29% 26%; /* Hover/selected items: #2F4254 */
-    --sidebar-accent-foreground: 210 20% 95%; /* Bright text on hover */
-    --sidebar-border: 210 29% 28%; /* Subtle border: #34495E */
-    --sidebar-ring: 354 100% 73%; /* Accent for focus rings */
+    --sidebar-background: 123 20% 15%;      /* Dark Desaturated Green (darker than main bg) */
+    --sidebar-foreground: 123 35% 85%;      /* Light Green-Gray Text */
+    --sidebar-primary: 5 42% 76%;           /* Accent Light Pink (bright) */
+    --sidebar-primary-foreground: 215 62% 11%;/* Dark Text on Pink */
+    --sidebar-accent: 123 20% 22%;          /* Hover - Slightly Lighter Dark Green */
+    --sidebar-accent-foreground: 123 40% 90%;/* Brighter Green text on hover */
+    --sidebar-border: 123 15% 25%;          /* Dark Green Border for Sidebar */
+    --sidebar-ring: 5 42% 76%;              /* Accent Ring */
   }
 }
 
@@ -108,15 +108,15 @@
   }
   body {
     @apply bg-background text-foreground;
-    /* Removed font-family: var(--font-geist-sans); to default to Tailwind's sans-serif (system UI) */
-    /* The --font-inter variable is available on the body but not applied by default to body text */
+    /* Font family defaults to Tailwind's sans-serif (system UI) */
+    /* --font-inter is available but not applied by default to body */
   }
   h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-inter); /* Changed from --font-geist-sans */
+    font-family: var(--font-inter); 
     font-weight: bold;
   }
   code, pre, .font-code {
-    font-family: var(--font-jetbrains-mono), var(--font-fira-code), monospace; /* Updated to use JetBrains Mono and Fira Code */
+    font-family: var(--font-jetbrains-mono), var(--font-fira-code), monospace;
   }
 }
 
