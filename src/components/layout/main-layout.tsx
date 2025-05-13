@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react";
@@ -249,13 +250,21 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   };
 
   const handleImport = () => {
-    // TODO: Implement import functionality
     toast({ title: "Import", description: "Import functionality not yet implemented." });
   };
 
   const handleExport = () => {
-    // TODO: Implement export functionality
     toast({ title: "Export", description: "Export functionality not yet implemented." });
+  };
+
+  const handleNewPrompt = () => {
+    toast({ title: "Action: New Prompt", description: "This button is now clickable." });
+    // TODO: Implement actual new prompt functionality
+  };
+
+  const handleEditPrompt = () => {
+    toast({ title: "Action: Edit Prompt", description: "This button is now clickable." });
+    // TODO: Implement actual edit prompt functionality
   };
   
   const sidebarWidth = "280px";
@@ -289,8 +298,10 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
           <ScrollArea className="h-[calc(100vh-200px)] group-data-[collapsible=icon]:h-[calc(100vh-140px)]">
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton href="#" tooltip="Home">
-                  <Home className="h-4 w-4" /> <span className="truncate">Home</span>
+                <SidebarMenuButton asChild tooltip="Home">
+                  <Link href="/">
+                    <Home className="h-4 w-4" /> <span className="truncate">Home</span>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               
@@ -366,7 +377,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             <Button variant="outline" size="sm" onClick={handleExport}>
               <DownloadCloud className="mr-2 h-4 w-4" /> Export
             </Button>
-            <Button size="sm">
+            <Button size="sm" onClick={handleNewPrompt}>
               <PlusCircle className="mr-2 h-4 w-4" /> New Prompt
             </Button>
              <SidebarTrigger className="md:hidden" />
@@ -379,9 +390,9 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-xl font-semibold">{selectedPrompt.name}</h3>
                 <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => setIsOptimizerOpen(true)}><Sparkles className="mr-1 h-4 w-4" /> Optimize</Button>
-                  <Button variant="ghost" size="sm"><History className="mr-1 h-4 w-4" /> Versions ({selectedPrompt.versions})</Button>
-                   <Button variant="ghost" size="sm"><GitFork className="mr-1 h-4 w-4" /> Branch</Button>
+                  <Button variant="ghost" size="sm" onClick={() => { setIsOptimizerOpen(true); }}><Sparkles className="mr-1 h-4 w-4" /> Optimize</Button>
+                  <Button variant="ghost" size="sm" onClick={() => toast({title: "Versions clicked"}) }><History className="mr-1 h-4 w-4" /> Versions ({selectedPrompt.versions})</Button>
+                   <Button variant="ghost" size="sm" onClick={() => toast({title: "Branch clicked"})}><GitFork className="mr-1 h-4 w-4" /> Branch</Button>
                 </div>
               </div>
               <Textarea
@@ -390,7 +401,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                 className="w-full min-h-[300px] p-4 font-code text-sm bg-background rounded-md border"
               />
                <div className="mt-4 flex justify-end">
-                <Button>Edit Prompt</Button>
+                <Button onClick={handleEditPrompt}>Edit Prompt</Button>
               </div>
             </div>
           ) : (
@@ -427,3 +438,4 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     </SidebarProvider>
   );
 }
+

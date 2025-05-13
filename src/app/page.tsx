@@ -1,10 +1,41 @@
+
+"use client"; // Making page.tsx a client component to use useToast for demonstration
+
 import { MainLayout } from "@/components/layout/main-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BarChart, FileText, Sparkles, Star } from "lucide-react";
 import Image from "next/image";
+import { useToast } from "@/hooks/use-toast"; 
 
 export default function DashboardPage() {
+  const { toast } = useToast();
+
+  const handleCreateNewPrompt = () => {
+    toast({ title: "Action: Create New Prompt", description: "This button is now clickable." });
+    // TODO: Implement actual functionality
+  };
+
+  const handleExploreFeatures = () => {
+    toast({ title: "Action: Explore Features", description: "This button is now clickable." });
+    // TODO: Implement actual functionality
+  };
+
+  const handleOptimizeAPrompt = () => {
+    toast({ title: "Action: Optimize a Prompt", description: "This button is now clickable." });
+    // TODO: Implement actual functionality (e.g., open optimizer modal)
+  };
+
+  const handleImportPrompts = () => {
+    toast({ title: "Action: Import Prompts", description: "This button is now clickable." });
+    // TODO: Implement actual functionality
+  };
+
+  const handleViewVersionHistory = () => {
+    toast({ title: "Action: View Version History", description: "This button is now clickable." });
+    // TODO: Implement actual functionality
+  };
+
   return (
     <MainLayout>
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -22,8 +53,8 @@ export default function DashboardPage() {
                 Let's make your AI interactions more powerful and efficient.
               </p>
               <div className="flex gap-2">
-                <Button>Create New Prompt</Button>
-                <Button variant="outline">Explore Features</Button>
+                <Button onClick={handleCreateNewPrompt}>Create New Prompt</Button>
+                <Button variant="outline" onClick={handleExploreFeatures}>Explore Features</Button>
               </div>
             </div>
             <div className="flex-shrink-0">
@@ -57,9 +88,9 @@ export default function DashboardPage() {
             <CardTitle className="flex items-center text-xl"><Sparkles className="w-5 h-5 mr-2 text-accent" /> Quick Actions</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
-            <Button variant="secondary" className="w-full justify-start">Optimize a Prompt</Button>
-            <Button variant="secondary" className="w-full justify-start">Import Prompts</Button>
-            <Button variant="secondary" className="w-full justify-start">View Version History</Button>
+            <Button variant="secondary" className="w-full justify-start" onClick={handleOptimizeAPrompt}>Optimize a Prompt</Button>
+            <Button variant="secondary" className="w-full justify-start" onClick={handleImportPrompts}>Import Prompts</Button>
+            <Button variant="secondary" className="w-full justify-start" onClick={handleViewVersionHistory}>View Version History</Button>
           </CardContent>
         </Card>
         
