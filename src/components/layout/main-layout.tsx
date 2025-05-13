@@ -50,12 +50,12 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
-import { 
-  Dialog, 
-  DialogContent, // Added DialogContent
-  DialogDescription, 
-  DialogHeader, 
-  DialogTitle as ShadDialogTitle // Merged and aliased DialogTitle
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle as ShadDialogTitle
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -70,7 +70,7 @@ import {
   Settings,
   ChevronDown,
   Search,
-  Folder as FolderIcon, 
+  Folder as FolderIcon,
   FileText,
   PlusCircle,
   UploadCloud,
@@ -80,19 +80,18 @@ import {
   Moon,
   Sun,
   Palette,
-  History,  
+  History,
   Star,
   GitFork,
   Trash2,
   Edit3
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useAuth } from "@/contexts/AuthContext"; 
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { exportPrompts, importPrompts } from "@/actions/promptActions";
-import { 
+import {
   createPrompt as createPromptAction,
   updatePrompt as updatePromptAction,
   deletePrompt as deletePromptAction,
@@ -100,26 +99,50 @@ import {
   getPromptVersions as getPromptVersionsAction,
   createFolder as createFolderAction,
   getFolders as getFoldersAction,
+  deleteFolder as deleteFolderAction,
+  updateFolder as updateFolderAction,
   branchPrompt as branchPromptAction
 } from "@/actions/firebaseActions";
+import {
+    importPrompts as importPromptsAction,
+    exportPrompts as exportPromptsAction
+} from "@/actions/promptActions";
 
 
 // Helper to convert Firestore Timestamps in fetched data
 const convertTimestamps = (data: any) => {
-  if (data?.created_at && typeof data.created_at === 'string') {
-    data.created_at = new Date(data.created_at);
+  if (data?.createdAt && typeof data.createdAt === 'object' && data.createdAt.seconds) {
+    data.createdAt = new Date(data.createdAt.seconds * 1000);
   }
-  if (data?.updated_at && typeof data.updated_at === 'string') {
-    data.updated_at = new Date(data.updated_at);
+  if (data?.updatedAt && typeof data.updatedAt === 'object' && data.updatedAt.seconds) {
+    data.updatedAt = new Date(data.updatedAt.seconds * 1000);
+  }
+  if (data?.timestamp && typeof data.timestamp === 'object' && data.timestamp.seconds) { // For versions
+    data.timestamp = new Date(data.timestamp.seconds * 1000);
+  }
+
+  // Firebase Timestamps are already converted to Date objects by Firestore SDK when fetched
+  // This is more for data coming directly from API routes which might be serialized Firestore Timestamps
+  if (data?.createdAt && typeof data.createdAt === 'string') {
+    data.createdAt = new Date(data.createdAt);
+  }
+  if (data?.updatedAt && typeof data.updatedAt === 'string') {
+    data.updatedAt = new Date(data.updatedAt);
   }
   if (data?.timestamp && typeof data.timestamp === 'string') { // For versions
     data.timestamp = new Date(data.timestamp);
   }
-  if (data?.history) {
-    data.history = data.history.map(convertTimestamps);
+
+  if (Array.isArray(data)) {
+    return data.map(convertTimestamps);
   }
-  if (data?.children) {
-    data.children = data.children.map(convertTimestamps);
+
+  if (typeof data === 'object' && data !== null) {
+    for (const key in data) {
+      if (Object.prototype.hasOwnProperty.call(data, key)) {
+        data[key] = convertTimestamps(data[key]);
+      }
+    }
   }
   return data;
 };
@@ -159,8 +182,8 @@ const PromptTreeItem: React.FC<{ item: ClientPrompt | ClientFolder; level: numbe
 
   const handleSelect = () => {
     onSelectPromptOrFolder(item);
-    if (item.type === "folder") {
-      handleToggle(); 
+    if (item.type === "folder" && sidebarState === "expanded") { // Only toggle folder if sidebar is expanded
+      handleToggle();
     }
   };
 
@@ -177,8 +200,8 @@ const PromptTreeItem: React.FC<{ item: ClientPrompt | ClientFolder; level: numbe
       >
         <Icon className="h-4 w-4 mr-2 flex-shrink-0" />
          { sidebarState === 'expanded' && <span className="truncate flex-grow">{item.name}</span> }
-        {(item.type === 'prompt' && (item as ClientPrompt).is_favorite) && <Star className="h-3 w-3 ml-auto text-yellow-400 flex-shrink-0" />}
-        {item.type === "folder" && (item as ClientFolder).children && sidebarState === 'expanded' && (
+        {(item.type === 'prompt' && (item as ClientPrompt).isFavorite) && <Star className="h-3 w-3 ml-auto text-yellow-400 flex-shrink-0" />}
+        {item.type === "folder" && (item as ClientFolder).children && (item as ClientFolder).children!.length > 0 && sidebarState === 'expanded' && (
           <ChevronDown className={`h-4 w-4 ml-auto transition-transform flex-shrink-0 ${isOpen ? "rotate-180" : ""}`} />
         )}
       </SidebarMenuButton>
@@ -201,11 +224,11 @@ const AiOptimizerModal: React.FC<{ open: boolean; onOpenChange: (open: boolean) 
   const { toast } = useToast();
 
   React.useEffect(() => {
-    if (open) { 
+    if (open) {
         setPromptToOptimize(initialPrompt || "");
-        setSuggestions([]); 
+        setSuggestions([]);
     }
-  }, [open, initialPrompt]); 
+  }, [open, initialPrompt]);
 
 
   const handleSubmit = async () => {
@@ -229,11 +252,12 @@ const AiOptimizerModal: React.FC<{ open: boolean; onOpenChange: (open: boolean) 
   return (
      <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[625px] bg-card">
-        <ShadDialogTitle className="sr-only">AI Prompt Optimizer</ShadDialogTitle>
-        <div className="flex items-center p-6 pt-0 border-b"><Sparkles className="w-5 h-5 mr-2 text-primary" /> AI Prompt Optimizer</div>
-          <DialogDescription className="p-6 pt-2 text-muted-foreground">
+        <DialogHeader>
+         <ShadDialogTitle>AI Prompt Optimizer</ShadDialogTitle>
+          <DialogDescription className="text-muted-foreground">
             Enter your prompt below to get AI-powered suggestions for improvement.
           </DialogDescription>
+        </DialogHeader>
         <div className="grid gap-4 py-4 px-6">
           <Textarea
             placeholder="Enter your prompt here..."
@@ -241,7 +265,7 @@ const AiOptimizerModal: React.FC<{ open: boolean; onOpenChange: (open: boolean) 
             onChange={(e) => setPromptToOptimize(e.target.value)}
             className="min-h-[100px] font-code bg-background"
           />
-          {isLoading && <p className="text-sm text-muted-foreground">Optimizing...</p>}
+          {isLoading && <div className="flex justify-center items-center p-4"><LoadingSpinner /> <span className="ml-2">Optimizing...</span></div>}
           {suggestions.length > 0 && (
             <div className="space-y-2">
               <h4 className="font-medium">Suggestions:</h4>
@@ -285,7 +309,7 @@ export function MainLayoutWrapper({ children }: { children: (props: MainLayoutCh
 function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) => React.ReactNode }) {
   const { user, signOut, isLoading: authLoading } = useAuth();
   const router = useRouter();
-  const queryClientHook = useQueryClient(); 
+  const queryClientHook = useQueryClient();
 
   const [selectedItem, setSelectedItem] = React.useState<ClientPrompt | ClientFolder | null>(null);
   const [isSearchOpen, setIsSearchOpen] = React.useState(false);
@@ -295,25 +319,25 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
   const [isEditPromptDialogOpen, setIsEditPromptDialogOpen] = React.useState(false);
   const [isVersionHistoryDialogOpen, setIsVersionHistoryDialogOpen] = React.useState(false);
   const [promptForHistory, setPromptForHistory] = React.useState<ClientPrompt | null>(null);
-  const [promptToDelete, setPromptToDelete] = React.useState<ClientPrompt | ClientFolder | null>(null);
-  
+  const [itemToDelete, setItemToDelete] = React.useState<ClientPrompt | ClientFolder | null>(null);
+
 
   const { data: promptsData, isLoading: promptsLoading, error: promptsError } = useQuery<ClientPrompt[]>({
-    queryKey: ['prompts', user?.id],
+    queryKey: ['prompts', user?.uid],
     queryFn: () => fetchPrompts(),
     enabled: !!user,
   });
 
   const { data: foldersData, isLoading: foldersLoading, error: foldersError } = useQuery<ClientFolder[]>({
-    queryKey: ['folders', user?.id],
+    queryKey: ['folders', user?.uid],
     queryFn: () => fetchFolders(),
     enabled: !!user,
   });
-  
+
   const { data: versionsData, isLoading: versionsLoading, refetch: refetchVersions } = useQuery<ClientPromptVersion[]>({
-    queryKey: ['promptVersions', promptForHistory?.id, user?.id],
+    queryKey: ['promptVersions', promptForHistory?.id, user?.uid],
     queryFn: () => promptForHistory ? fetchPromptVersions(promptForHistory.id) : Promise.resolve([]),
-    enabled: !!promptForHistory && !!user, 
+    enabled: !!promptForHistory && !!user,
   });
 
 
@@ -328,7 +352,7 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
   const createMutation = useMutation({
     mutationFn: async (data: { values: NewPromptFormValues }) => {
       const { values } = data;
-      let newFolderId: string | null = null;
+      let finalFolderId: string | null = null;
 
       if (values.saveLocationType === 'new' && values.newFolderName) {
         const folderResult = await createFolderAction({
@@ -337,23 +361,26 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
         });
         if (folderResult.error) throw new Error(folderResult.error);
         if (!folderResult.data) throw new Error("Failed to create folder, no data returned.");
-        newFolderId = folderResult.data.id;
+        finalFolderId = folderResult.data.id;
+      } else if (values.saveLocationType === 'existing') {
+        finalFolderId = values.selectedExistingFolderId === 'root' ? null : values.selectedExistingFolderId!;
       }
 
-      const promptPayload: Omit<FirebasePrompt, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'versions'> = {
+
+      const promptPayload = {
         name: values.promptName,
         content: values.promptContent,
-        folder_id: newFolderId || (values.selectedExistingFolderId === 'root' ? null : values.selectedExistingFolderId!),
-        is_favorite: false,
+        folderId: finalFolderId,
+        isFavorite: false, // Default value
       };
-      
+
       const promptResult = await createPromptAction(promptPayload);
       if (promptResult.error) throw new Error(promptResult.error);
       return promptResult.data;
     },
     onSuccess: (newItem) => {
-      queryClientHook.invalidateQueries({ queryKey: ['prompts', user?.id] });
-      queryClientHook.invalidateQueries({ queryKey: ['folders', user?.id] });
+      queryClientHook.invalidateQueries({ queryKey: ['prompts', user?.uid] });
+      queryClientHook.invalidateQueries({ queryKey: ['folders', user?.uid] });
       if (newItem) {
         setSelectedItem(convertTimestamps(newItem) as ClientPrompt);
       }
@@ -366,19 +393,15 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
   });
 
   const updatePromptMutation = useMutation({
-    mutationFn: async (data: { id: string; content: string; name?: string; is_favorite?: boolean; folder_id?: string | null }) => {
-      const result = await updatePromptAction(data.id, { 
-        content: data.content, 
-        name: data.name, 
-        is_favorite: data.is_favorite,
-        folder_id: data.folder_id,
-      });
+    mutationFn: async (data: { id: string; name?: string; content?: string; folderId?: string | null; isFavorite?: boolean; }) => {
+      const { id, ...payload } = data;
+      const result = await updatePromptAction(id, payload);
       if (result.error) throw new Error(result.error);
       return result.data;
     },
     onSuccess: (updatedPrompt) => {
-      queryClientHook.invalidateQueries({ queryKey: ['prompts', user?.id] });
-      queryClientHook.invalidateQueries({ queryKey: ['promptVersions', updatedPrompt?.id, user?.id] }); 
+      queryClientHook.invalidateQueries({ queryKey: ['prompts', user?.uid] });
+      queryClientHook.invalidateQueries({ queryKey: ['promptVersions', updatedPrompt?.id, user?.uid] });
       if (updatedPrompt) {
         setSelectedItem(convertTimestamps(updatedPrompt) as ClientPrompt);
       }
@@ -395,29 +418,26 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
       if (item.type === 'prompt') {
         const result = await deletePromptAction(item.id);
         if (result.error) throw new Error(result.error);
-        return item.id;
-      } 
-      // TODO: Add folder deletion logic / API if needed
-      // else if (item.type === 'folder') {
-      //   // const result = await deleteFolderAction(item.id);
-      //   // if (result.error) throw new Error(result.error);
-      //   // return item.id;
-      //   throw new Error("Folder deletion not yet implemented via API.");
-      // }
-      throw new Error("Unsupported item type for deletion.");
+      } else if (item.type === 'folder') {
+        const result = await deleteFolderAction(item.id);
+        if (result.error) throw new Error(result.error);
+      } else {
+        throw new Error("Unsupported item type for deletion.");
+      }
+      return item.id;
     },
     onSuccess: (deletedItemId) => {
-      queryClientHook.invalidateQueries({ queryKey: ['prompts', user?.id] });
-      queryClientHook.invalidateQueries({ queryKey: ['folders', user?.id] });
+      queryClientHook.invalidateQueries({ queryKey: ['prompts', user?.uid] });
+      queryClientHook.invalidateQueries({ queryKey: ['folders', user?.uid] });
       if (selectedItem?.id === deletedItemId) {
         setSelectedItem(null);
       }
-      setPromptToDelete(null);
+      setItemToDelete(null);
       toast({ title: "Success", description: "Item deleted successfully." });
     },
     onError: (error: Error) => {
       toast({ title: "Error deleting item", description: error.message, variant: "destructive" });
-      setPromptToDelete(null);
+      setItemToDelete(null);
     }
   });
 
@@ -443,10 +463,10 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
 
   const handleLogout = async () => {
     await signOut();
-    queryClientHook.clear(); 
+    queryClientHook.clear();
     router.push('/login');
   };
-  
+
 
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -454,7 +474,7 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
       toast({ title: "Import Error", description: "No file selected.", variant: "destructive" });
       return;
     }
-    
+
     const fileType = file.name.endsWith('.json') ? 'json' : file.name.endsWith('.csv') ? 'csv' : null;
     if (!fileType) {
       toast({ title: "Import Error", description: "Unsupported file type. Please use JSON or CSV.", variant: "destructive" });
@@ -462,12 +482,12 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
     }
 
     try {
-      const result = await importPrompts(file);
+      const result = await importPromptsAction(file);
       if (result.error) {
         throw new Error(result.error);
       }
       toast({ title: "Import Successful", description: `${result.count} prompts imported.` });
-      queryClientHook.invalidateQueries({ queryKey: ['prompts', user?.id] });
+      queryClientHook.invalidateQueries({ queryKey: ['prompts', user?.uid] });
     } catch (error: any) {
       toast({ title: "Import Failed", description: error.message, variant: "destructive" });
     }
@@ -475,7 +495,7 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
 
   const handleExport = async (format: "json" | "csv") => {
     try {
-      const result = await exportPrompts(format);
+      const result = await exportPromptsAction(format);
       if (result.error) {
         throw new Error(result.error);
       }
@@ -495,7 +515,7 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
       toast({ title: "Export Failed", description: error.message, variant: "destructive" });
     }
   };
-  
+
   const handleOpenNewPromptDialog = () => {
     setIsNewPromptDialogOpen(true);
   };
@@ -521,18 +541,19 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
   const handleSaveChangesToPrompt = (newContent: string) => {
     if (!selectedItem || selectedItem.type !== 'prompt') return;
     const currentPrompt = selectedItem as ClientPrompt;
-    updatePromptMutation.mutate({ 
-      id: currentPrompt.id, 
-      content: newContent, 
-      name: currentPrompt.name, 
-      is_favorite: currentPrompt.is_favorite, 
-      folder_id: currentPrompt.folder_id 
+    updatePromptMutation.mutate({
+      id: currentPrompt.id,
+      content: newContent,
+      // name: currentPrompt.name, // Keep existing name unless changed
+      // isFavorite: currentPrompt.isFavorite, // Keep existing favorite status unless changed
+      // folderId: currentPrompt.folderId // Keep existing folder unless changed
     });
   };
 
   const handleOpenVersionHistory = () => {
     if (selectedItem && selectedItem.type === 'prompt') {
       setPromptForHistory(selectedItem as ClientPrompt);
+      refetchVersions(); // Fetch versions when opening
       setIsVersionHistoryDialogOpen(true);
     } else {
       toast({ title: "Error", description: "Please select a prompt to view its history.", variant: "destructive" });
@@ -540,29 +561,29 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
   };
 
   const confirmDeleteItem = (item: ClientPrompt | ClientFolder) => {
-    setPromptToDelete(item);
+    setItemToDelete(item);
   };
 
   const executeDeleteItem = () => {
-    if (promptToDelete) {
-      deleteItemMutation.mutate(promptToDelete);
+    if (itemToDelete) {
+      deleteItemMutation.mutate(itemToDelete);
     }
   };
-  
+
   const handleBranchPrompt = async () => {
     if (!selectedItem || selectedItem.type !== 'prompt' || !user) {
       toast({ title: "Cannot Branch", description: "Please select a prompt and ensure you are logged in.", variant: "destructive" });
       return;
     }
     const currentPrompt = selectedItem as ClientPrompt;
-  
+
     try {
         const result = await branchPromptAction(currentPrompt.id);
         if (result.error || !result.data) {
             throw new Error(result.error || "Failed to branch prompt");
         }
         const createdBranchedPrompt = result.data;
-        queryClientHook.invalidateQueries({ queryKey: ['prompts', user?.id] });
+        queryClientHook.invalidateQueries({ queryKey: ['prompts', user?.uid] });
         setSelectedItem(convertTimestamps(createdBranchedPrompt) as ClientPrompt);
         toast({ title: "Prompt Branched", description: `Created branch: "${createdBranchedPrompt.name}".` });
 
@@ -573,14 +594,12 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
 
   const sidebarWidth = "280px";
 
-  if (authLoading || ((promptsLoading || foldersLoading) && !promptsData && !foldersData && user)) { 
+  if (authLoading || ((promptsLoading || foldersLoading) && !promptsData && !foldersData && user)) {
     return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
   }
-  if (!authLoading && !user && router) { // Ensure router is available
-    if (router && typeof window !== 'undefined' && window.location.pathname !== '/login' && window.location.pathname !== '/signup') {
+  if (!authLoading && !user && typeof window !== 'undefined' && window.location.pathname !== '/login' && window.location.pathname !== '/signup') {
       router.push('/login');
-    }
-    return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>; // Show loader while redirecting
+    return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
   }
 
   if (promptsError || foldersError) {
@@ -621,7 +640,7 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-              
+
               <SidebarGroup>
                 <SidebarGroupLabel tooltip="Prompts & Folders" className="flex items-center">
                   <BookOpen className="h-4 w-4 mr-2"/> Items
@@ -647,11 +666,11 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="w-full justify-start p-2">
                 <Avatar className="h-8 w-8 mr-2">
-                  <AvatarImage src="https://picsum.photos/40/40?grayscale" alt="User Avatar" data-ai-hint="profile avatar"/>
+                  <AvatarImage src={user?.photoURL || `https://picsum.photos/seed/${user?.uid || 'default'}/40/40?grayscale`} alt="User Avatar" data-ai-hint="profile avatar"/>
                   <AvatarFallback>{user?.email?.substring(0,2).toUpperCase() || 'PV'}</AvatarFallback>
                 </Avatar>
                 <div className="truncate group-data-[collapsible=icon]:hidden">
-                  <p className="font-semibold text-sm">{user?.email?.split('@')[0] || "User"}</p>
+                  <p className="font-semibold text-sm">{user?.displayName || user?.email?.split('@')[0] || "User"}</p>
                   <p className="text-xs text-muted-foreground">{user?.email || "user@promptverse.ai"}</p>
                 </div>
               </Button>
@@ -681,14 +700,14 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
           </div>
           <div className="flex items-center gap-2">
              {selectedItem && (
-              <Button variant="ghost" size="sm" onClick={() => confirmDeleteItem(selectedItem)}>
+              <Button variant="ghost" size="sm" onClick={() => confirmDeleteItem(selectedItem)} disabled={deleteItemMutation.isPending}>
                 <Trash2 className="mr-1 h-4 w-4" /> Delete
               </Button>
             )}
             <Button variant="outline" size="sm" onClick={() => handleOpenOptimizerDialog(selectedItem?.type === 'prompt' ? (selectedItem as ClientPrompt).content : undefined)}>
               <Sparkles className="mr-2 h-4 w-4" /> Optimize
             </Button>
-            
+
             <Input type="file" id="import-file" className="hidden" onChange={handleImport} accept=".json,.csv"/>
             <Button variant="outline" size="sm" onClick={() => document.getElementById('import-file')?.click()}>
                 <UploadCloud className="mr-2 h-4 w-4" /> Import
@@ -729,7 +748,7 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
               </div>
               <Textarea
                 value={(selectedItem as ClientPrompt).content ?? ""}
-                readOnly 
+                readOnly
                 className="w-full min-h-[300px] p-4 font-code text-sm bg-background rounded-md border"
               />
                <div className="mt-4 flex justify-end">
@@ -740,6 +759,7 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
             <div className="bg-card p-6 rounded-lg shadow">
               <h3 className="text-xl font-semibold mb-2">Folder: {selectedItem.name}</h3>
               <p className="text-muted-foreground">Contains {(selectedItem as ClientFolder).children?.length || 0} item(s).</p>
+               {/* TODO: Add folder edit/rename functionality here if needed */}
             </div>
           ) : (
             children({ openNewPromptDialog: handleOpenNewPromptDialog, openOptimizerDialog: handleOpenOptimizerDialog })
@@ -747,7 +767,7 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
         </main>
       </SidebarInset>
       <CommandDialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
-        <DialogHeader> {/* Added DialogHeader for accessibility */}
+        <DialogHeader>
           <ShadDialogTitle className="sr-only">Command Menu</ShadDialogTitle>
           <DialogDescription className="sr-only">Use this to search for prompts or execute commands.</DialogDescription>
         </DialogHeader>
@@ -755,10 +775,10 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
           <CommandGroup heading="Suggestions">
-            <CommandItem onSelect={() => { 
+            <CommandItem onSelect={() => {
                 const demoPrompt = promptsData?.find(p => p.name === "Ad Copy Generator");
                 if(demoPrompt) { handleSelectPromptOrFolder(demoPrompt); }
-                setIsSearchOpen(false); 
+                setIsSearchOpen(false);
             }}>
                 <FileText className="mr-2 h-4 w-4" />
                 <span>Open "Ad Copy Generator"</span>
@@ -775,8 +795,9 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
           <CommandSeparator />
           <CommandGroup heading="Prompts & Folders">
              {promptTree.flatMap(item => item.type === 'folder' && (item as ClientFolder).children ? (item as ClientFolder).children! : [item] )
+             .filter(Boolean) // Filter out any null/undefined items, though promptTree should not have them
              .map(item => (
-                 item && <CommandItem key={item.id} onSelect={() => { handleSelectPromptOrFolder(item); setIsSearchOpen(false); }}>
+                 <CommandItem key={item.id} onSelect={() => { handleSelectPromptOrFolder(item); setIsSearchOpen(false); }}>
                     {React.createElement(item.icon || (item.type === 'folder' ? FolderIcon : FileText), {className: "mr-2 h-4 w-4"})}
                     <span>{item.name}</span>
                  </CommandItem>
@@ -784,15 +805,15 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
           </CommandGroup>
         </CommandList>
       </CommandDialog>
-      <AiOptimizerModal 
-        open={isOptimizerOpen} 
-        onOpenChange={setIsOptimizerOpen} 
+      <AiOptimizerModal
+        open={isOptimizerOpen}
+        onOpenChange={setIsOptimizerOpen}
         initialPrompt={optimizerInitialPrompt}
       />
-      <NewPromptDialog 
-        open={isNewPromptDialogOpen} 
+      <NewPromptDialog
+        open={isNewPromptDialogOpen}
         onOpenChange={setIsNewPromptDialogOpen}
-        allPrompts={promptsData || []} 
+        allPrompts={promptsData || []}
         allFolders={foldersData || []}
         onCreate={handleCreateNewItem}
         isCreating={createMutation.isPending}
@@ -811,22 +832,28 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
         open={isVersionHistoryDialogOpen}
         onOpenChange={setIsVersionHistoryDialogOpen}
         prompt={promptForHistory}
-        versions={versionsData || []} 
+        versions={versionsData || []}
         isLoading={versionsLoading}
       />
-      {promptToDelete && (
-        <AlertDialog open={!!promptToDelete} onOpenChange={() => setPromptToDelete(null)}>
+      {itemToDelete && (
+        <AlertDialog open={!!itemToDelete} onOpenChange={() => setItemToDelete(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Are you sure?</AlertDialogTitle>
               <AlertDialogDescription>
                 This action cannot be undone. This will permanently delete the item
-                "{promptToDelete.name}". {(promptToDelete.type === 'folder' && (promptToDelete as ClientFolder).children?.length) ? 'It also contains other items.' : ''}
+                "{itemToDelete.name}".
+                {itemToDelete.type === 'folder' && (itemToDelete as ClientFolder).children?.length ? ` It also contains ${(itemToDelete as ClientFolder).children!.length} item(s). Deleting a folder will also delete all its contents.` : ''}
+                {itemToDelete.type === 'prompt' ? ' All its versions will also be deleted.' : ''}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setPromptToDelete(null)}>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={executeDeleteItem} disabled={deleteItemMutation.isPending}>
+              <AlertDialogCancel onClick={() => setItemToDelete(null)} disabled={deleteItemMutation.isPending}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={executeDeleteItem}
+                disabled={deleteItemMutation.isPending}
+                className={buttonVariants({variant: "destructive"})}
+              >
                 {deleteItemMutation.isPending ? "Deleting..." : "Delete"}
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -836,3 +863,5 @@ function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) =
     </SidebarProvider>
   );
 }
+
+    
