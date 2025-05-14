@@ -1,23 +1,29 @@
 // src/app/page.tsx
 "use client"; 
 
-import { MainLayoutWrapper, type PageRenderProps } from "@/components/layout/main-layout";
+import { type PageRenderProps } from "@/components/layout/main-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, Sparkles, Star, UploadCloud, DownloadCloud, PlusCircle, Palette, History, LogIn, UserPlus, Folder as FolderIcon } from "lucide-react";
+import { FileText, Sparkles, UploadCloud, DownloadCloud, PlusCircle, Palette, History, LogIn, UserPlus } from "lucide-react";
 import Image from "next/image";
 import { useToast } from "@/hooks/use-toast"; 
 import { useAuth } from "@/contexts/AuthContext"; 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-
+import React, { useEffect, useState } from "react"; // Added React, useEffect, useState
 
 // Define the content of the dashboard separately
 function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginDialog, openSignupDialog }: PageRenderProps) {
   const { toast } = useToast();
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
 
   const handleCreateNewPrompt = () => {
     if (!user) {
@@ -28,7 +34,6 @@ function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginD
     if (openNewPromptDialog) {
       openNewPromptDialog();
     } else {
-      // This case might occur if MainLayoutWrapper doesn't pass it correctly
       toast({ title: "Error", description: "New prompt dialog is unavailable.", variant: "destructive" });
     }
   };
@@ -56,7 +61,6 @@ function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginD
       if (openLoginDialog) openLoginDialog(); else router.push('/login');
       return;
     }
-    // The import button is in MainLayout, this simulates its click if not directly available
     const importButton = document.getElementById('import-button-mainlayout'); 
     if (importButton instanceof HTMLElement) { 
       importButton.click();
@@ -75,7 +79,7 @@ function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginD
   };
 
 
-  if (authLoading && !user) { 
+  if (!isMounted || (authLoading && !user)) { 
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center p-6">
          <LoadingSpinner size="lg" />
@@ -87,9 +91,7 @@ function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginD
     );
   }
 
-  if (!user && typeof window !== 'undefined') {
-    // This conditional rendering will be hit if MainLayout's useEffect for redirect hasn't fired yet
-    // or if the user is already on login/signup page
+  if (!user) {
     const onLogin = openLoginDialog ? openLoginDialog : () => router.push('/login');
     const onSignup = openSignupDialog ? openSignupDialog : () => router.push('/signup');
     
@@ -168,10 +170,16 @@ function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginD
   );
 }
 
+// Use MainLayout directly as MainLayoutWrapper was removed.
+// Ensure MainLayout is imported if it's defined in a separate file.
+// For this example, assuming MainLayout is part of the structure that provides AuthContext and other necessities.
+import { MainLayout } from "@/components/layout/main-layout";
+
+
 export default function DashboardPage() {
   return (
-    <MainLayoutWrapper>
+    <MainLayout>
       {(props: PageRenderProps) => <DashboardContent {...props} />}
-    </MainLayoutWrapper>
+    </MainLayout>
   );
 }
