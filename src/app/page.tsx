@@ -1,7 +1,7 @@
 // src/app/page.tsx
 "use client"; 
 
-import { MainLayout, type PageRenderProps } from "@/components/layout/main-layout";
+import { MainLayoutWrapper, type PageRenderProps } from "@/components/layout/main-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FileText, Sparkles, Star, UploadCloud, DownloadCloud, PlusCircle, Palette, History, LogIn, UserPlus, Folder as FolderIcon } from "lucide-react";
@@ -58,10 +58,10 @@ function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginD
     }
     // The import button is in MainLayout, this simulates its click if not directly available
     const importButton = document.getElementById('import-button-mainlayout'); 
-    if (importButton instanceof HTMLElement) { // More generic check
+    if (importButton instanceof HTMLElement) { 
       importButton.click();
     } else {
-        toast({ title: "Info", description: "Use the 'Import' button in the header to import prompts. (Functionality disabled)", variant: "default" });
+        toast({ title: "Info", description: "Use the 'Import' button in the header to import prompts.", variant: "default" });
     }
   };
 
@@ -105,7 +105,7 @@ function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginD
           <Button size="lg" variant="outline" onClick={onSignup}><UserPlus className="mr-2 h-5 w-5" />Sign Up</Button>
         </div>
         <p className="mt-8 text-sm text-muted-foreground">
-          Explore PromptVerse features by logging in or signing up. (Backend features may be limited)
+          Explore PromptVerse features by logging in or signing up.
         </p>
       </div>
     );
@@ -150,12 +150,7 @@ function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginD
             <CardTitle className="flex items-center text-xl"><FileText className="w-5 h-5 mr-2 text-accent" /> Recent Prompts</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">No recent prompts available. (Data store removed)</p>
-            {/* <ul className="space-y-2">
-              <li className="flex justify-between items-center p-2 rounded hover:bg-muted"><span>Ad Copy Generator</span> <Star className="w-4 h-4 text-yellow-400"/></li>
-              <li className="flex justify-between items-center p-2 rounded hover:bg-muted"><span>Welcome Email</span></li>
-              <li className="flex justify-between items-center p-2 rounded hover:bg-muted"><span>Code Documentation</span></li>
-            </ul> */}
+            <p className="text-sm text-muted-foreground">No recent prompts available. (Data backend not fully implemented)</p>
           </CardContent>
         </Card>
 
@@ -165,7 +160,7 @@ function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginD
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
             <Button variant="secondary" className="w-full justify-start" onClick={handleOptimizeAPrompt}><Sparkles className="mr-2 h-4 w-4"/>Optimize a Prompt</Button>
-            <Button variant="secondary" className="w-full justify-start" onClick={handleImportPrompts} disabled><UploadCloud className="mr-2 h-4 w-4"/>Import Prompts (Disabled)</Button>
+            <Button variant="secondary" className="w-full justify-start" onClick={handleImportPrompts}><UploadCloud className="mr-2 h-4 w-4"/>Import Prompts</Button>
             <Button variant="secondary" className="w-full justify-start" onClick={handleViewVersionHistory}><History className="mr-2 h-4 w-4"/>View Version History</Button>
           </CardContent>
         </Card>
@@ -175,15 +170,8 @@ function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginD
 
 export default function DashboardPage() {
   return (
-    // MainLayout is now wrapped by MainLayoutWrapper in main-layout.tsx itself for QueryClient and AuthProvider
-    // So, we directly use MainLayout here.
-    // For clarity, if MainLayoutWrapper was meant to be used here, it'd be:
-    // <MainLayoutWrapper>
-    //   {(props: PageRenderProps) => <DashboardContent {...props} />}
-    // </MainLayoutWrapper>
-    // But given the setup, MainLayout itself is the top-level for page content.
-    <MainLayout>
+    <MainLayoutWrapper>
       {(props: PageRenderProps) => <DashboardContent {...props} />}
-    </MainLayout>
+    </MainLayoutWrapper>
   );
 }
