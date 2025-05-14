@@ -1,15 +1,15 @@
-
 "use client"; 
 
-import { MainLayoutWrapper, type PageRenderProps } from "@/components/layout/main-layout";
+import { MainLayout, type PageRenderProps } from "@/components/layout/main-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, Sparkles, Star, Trash2, Edit3, GitFork, History as HistoryIcon, Palette, Search as SearchIcon, Settings, LifeBuoy, Moon, Sun, UploadCloud, DownloadCloud, PlusCircle, BookOpen, Folder as FolderIcon, LogIn, UserPlus } from "lucide-react";
+import { FileText, Sparkles, Star, UploadCloud, DownloadCloud, PlusCircle, Palette, History, LogIn, UserPlus, Folder as FolderIcon } from "lucide-react";
 import Image from "next/image";
 import { useToast } from "@/hooks/use-toast"; 
-import { useAuth } from "@/contexts/AuthContext"; // Corrected import path
+import { useAuth } from "@/contexts/AuthContext"; 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 
 // Define the content of the dashboard separately
@@ -21,7 +21,7 @@ function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginD
   const handleCreateNewPrompt = () => {
     if (!user) {
       toast({ title: "Authentication Required", description: "Please log in to create a new prompt.", variant: "destructive" });
-      if (openLoginDialog) openLoginDialog();
+      if (openLoginDialog) openLoginDialog(); else router.push('/login');
       return;
     }
     if (openNewPromptDialog) {
@@ -39,7 +39,7 @@ function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginD
   const handleOptimizeAPrompt = () => {
      if (!user) {
       toast({ title: "Authentication Required", description: "Please log in to optimize a prompt.", variant: "destructive" });
-      if (openLoginDialog) openLoginDialog();
+      if (openLoginDialog) openLoginDialog(); else router.push('/login');
       return;
     }
     if (openOptimizerDialog) {
@@ -52,27 +52,23 @@ function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginD
   const handleImportPrompts = () => {
      if (!user) {
       toast({ title: "Authentication Required", description: "Please log in to import prompts.", variant: "destructive" });
-      if (openLoginDialog) openLoginDialog();
+      if (openLoginDialog) openLoginDialog(); else router.push('/login');
       return;
     }
-    // This will be handled by MainLayout's import functionality
-    // Trigger the hidden file input in MainLayout
-    const importButton = document.getElementById('import-button-mainlayout');
-    if (importButton) {
+    const importButton = document.getElementById('import-button-mainlayout'); // Ensure this ID exists on an actual button if used
+    if (importButton instanceof HTMLButtonElement || importButton instanceof HTMLInputElement) { // Type guard for click
       importButton.click();
     } else {
-        toast({ title: "Error", description: "Import functionality not available.", variant: "destructive" });
+        toast({ title: "Info", description: "Use the 'Import' button in the header to import prompts.", variant: "default" });
     }
   };
 
   const handleViewVersionHistory = () => {
      if (!user) {
       toast({ title: "Authentication Required", description: "Please log in to view version history.", variant: "destructive" });
-       if (openLoginDialog) openLoginDialog();
+       if (openLoginDialog) openLoginDialog(); else router.push('/login');
       return;
     }
-    // This typically requires a prompt to be selected.
-    // The actual opening of version history dialog is handled in MainLayout when a prompt is selected.
     toast({ title: "Info", description: "Select a prompt from the sidebar to view its version history." });
   };
 
@@ -80,8 +76,8 @@ function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginD
   if (authLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center p-6">
-         <Palette className="w-24 h-24 text-primary mb-6 animate-pulse" />
-        <h1 className="text-4xl font-bold mb-4 text-foreground">Loading PromptVerse...</h1>
+         <LoadingSpinner size="lg" />
+        <h1 className="text-4xl font-bold mb-4 text-foreground mt-4">Loading PromptVerse...</h1>
         <p className="text-xl text-muted-foreground mb-8 max-w-2xl">
           Please wait while we prepare your prompt universe.
         </p>
@@ -89,8 +85,7 @@ function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginD
     );
   }
 
-  if (!user && typeof window !== 'undefined' && (window.location.pathname === '/' || window.location.pathname === '/dashboard')) {
-     // Check if openLoginDialog and openSignupDialog are available before calling
+  if (!user && typeof window !== 'undefined' && (window.location.pathname === '/' || window.location.pathname === '/dashboard'  || window.location.pathname.startsWith('/app'))) {
     const onLogin = openLoginDialog ? openLoginDialog : () => router.push('/login');
     const onSignup = openSignupDialog ? openSignupDialog : () => router.push('/signup');
     
@@ -129,7 +124,7 @@ function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginD
                 Let's make your AI interactions more powerful and efficient.
               </p>
               <div className="flex gap-2">
-                <Button onClick={handleCreateNewPrompt}><PlusCircle className="mr-2 h-4 w-4"/>Create New Prompt</Button>
+                <Button onClick={handleCreateNewPrompt}><PlusCircle className="mr-2 h-4 w-4"/>Create New Item</Button>
                 <Button variant="outline" onClick={handleExploreFeatures}>Explore Features</Button>
               </div>
             </div>
@@ -168,7 +163,7 @@ function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginD
           <CardContent className="flex flex-col gap-2">
             <Button variant="secondary" className="w-full justify-start" onClick={handleOptimizeAPrompt}><Sparkles className="mr-2 h-4 w-4"/>Optimize a Prompt</Button>
             <Button variant="secondary" className="w-full justify-start" onClick={handleImportPrompts}><UploadCloud className="mr-2 h-4 w-4"/>Import Prompts</Button>
-            <Button variant="secondary" className="w-full justify-start" onClick={handleViewVersionHistory}><HistoryIcon className="mr-2 h-4 w-4"/>View Version History</Button>
+            <Button variant="secondary" className="w-full justify-start" onClick={handleViewVersionHistory}><History className="mr-2 h-4 w-4"/>View Version History</Button>
           </CardContent>
         </Card>
       </div>
@@ -177,9 +172,8 @@ function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginD
 
 export default function DashboardPage() {
   return (
-    <MainLayoutWrapper>
+    <MainLayout>
       {(props: PageRenderProps) => <DashboardContent {...props} />}
-    </MainLayoutWrapper>
+    </MainLayout>
   );
 }
-
