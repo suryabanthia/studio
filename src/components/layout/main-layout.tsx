@@ -51,7 +51,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
-import { Dialog, DialogContent as ShadDialogContent, DialogHeader as ShadDialogHeader, DialogTitle as ShadDialogTitle, DialogDescription as ShadDialogDescription, DialogFooter as ShadDialogFooter } from "@/components/ui/dialog"; // Aliased to avoid conflict if any
+import { Dialog, DialogContent as ShadDialogContent, DialogHeader as ShadDialogHeader, DialogTitle as ShadDialogTitle, DialogDescription as ShadDialogDescription, DialogFooter as ShadDialogFooter } from "@/components/ui/dialog";
 
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -59,7 +59,8 @@ import { optimizePrompt, type PromptOptimizerInput, type PromptOptimizerOutput }
 import { NewPromptDialog, type NewPromptFormValues } from "@/components/dialogs/new-prompt-dialog";
 import { EditPromptDialog } from "@/components/dialogs/edit-prompt-dialog";
 import { VersionHistoryDialog } from "@/components/dialogs/version-history-dialog";
-import { generateNewId } from "@/lib/prompt-utils";
+import { generateNewId, addPromptToTree, addFolderToTree, updatePromptInTree, removeItemFromTree } from "@/lib/prompt-utils";
+
 
 import {
   Home,
@@ -86,46 +87,18 @@ import {
   LogOut
 } from "lucide-react";
 import { useTheme } from "next-themes";
-// AuthProvider is removed from here, useAuth is still needed
 import { useAuth } from "@/contexts/AuthContext"; 
 import { useRouter } from "next/navigation";
-import { 
-  createPrompt as createPromptAction,
-  updatePrompt as updatePromptAction,
-  deletePrompt as deletePromptAction,
-  getPrompts as getPromptsAction,
-  getPromptVersions as getPromptVersionsAction,
-  createFolder as createFolderAction,
-  getFolders as getFoldersAction,
-  branchPrompt as branchPromptAction,
-  exportPrompts as exportPromptsAction,
-  importPrompts as importPromptsAction
-} from "@/actions/firebaseActions"; 
 import { useQuery, useMutation, useQueryClient, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { Timestamp } from "firebase/firestore";
-
-
-// Helper to convert Firestore Timestamps in fetched data
-const convertTimestamps = (data: any) => {
-  if (data && typeof data === 'object') {
-    for (const key in data) {
-      if (data[key] instanceof Timestamp) {
-        data[key] = data[key].toDate();
-      } else if (typeof data[key] === 'object') {
-        convertTimestamps(data[key]);
-      }
-    }
-  }
-  return data;
-};
+// Removed Firebase Timestamp import as it's no longer used directly here. Date objects are used.
 
 
 export interface PromptVersion {
   id: string; 
   versionNumber: number;
   content: string;
-  timestamp: Date | Timestamp; 
+  timestamp: Date; // Using Date object
   userId?: string; 
   promptId?: string; 
 }
@@ -142,8 +115,8 @@ export interface Prompt {
   history?: PromptVersion[];
   userId?: string;
   parentId?: string | null; 
-  createdAt?: Date | Timestamp; 
-  updatedAt?: Date | Timestamp; 
+  createdAt?: Date; 
+  updatedAt?: Date; 
 }
 
 const PromptTreeItem: React.FC<{ 
@@ -299,74 +272,57 @@ export interface MainLayoutChildrenProps {
 }
 export type PageRenderProps = MainLayoutChildrenProps;
 
-
-// Define queryClient here if it's specific to MainLayoutWrapper's scope,
-// or ensure it's passed down/accessed correctly if meant to be the global one from Providers.
-// For now, keeping it as a local new instance.
-const queryClient = new QueryClient();
+const queryClient = new QueryClient(); // Keep for potential non-FirebaseTanstack Query usage
 
 export function MainLayoutWrapper({ children }: { children: (props: MainLayoutChildrenProps) => React.ReactNode }) {
     return (
-      // AuthProvider is removed from here as it's now global in src/app/providers.tsx
         <QueryClientProvider client={queryClient}>
             <MainLayout>{children}</MainLayout>
         </QueryClientProvider>
     );
 }
 
-
 export function MainLayout({ children: renderPropChildren }: { children: (props: MainLayoutChildrenProps) => React.ReactNode }) {
   const { user, loading: authLoading, signOut: appSignOut } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
-  const reactQueryClient = useQueryClient(); // Use the client from the provider via hook
   
-  const [tree, setTree] = React.useState<Prompt[]>([]);
+  const [tree, setTree] = React.useState<Prompt[]>([]); // Local state for prompts/folders
   const [selectedPrompt, setSelectedPrompt] = React.useState<Prompt | null>(null);
-  
-  const { data: promptsAndFoldersData, isLoading: isLoadingPrompts, error: promptsError } = useQuery<{ prompts: Prompt[], folders: Prompt[] }, Error>({
-    queryKey: ['promptsAndFolders', user?.uid],
-    queryFn: async () => {
-      if (!user?.uid) throw new Error("User not authenticated for fetching prompts/folders");
-      
-      const [promptsResult, foldersResult] = await Promise.all([
-        getPromptsAction({ userId: user.uid }),
-        getFoldersAction({ userId: user.uid })
-      ]);
+  const [isLoadingPrompts, setIsLoadingPrompts] = React.useState(false); // Mock loading
+  const [promptsError, setPromptsError] = React.useState<Error | null>(null); // Mock error
 
-      if (promptsResult.error) throw promptsResult.error;
-      if (foldersResult.error) throw foldersResult.error;
-      
-      return { 
-        prompts: convertTimestamps(promptsResult.prompts || []), 
-        folders: convertTimestamps(foldersResult.folders || []) 
-      };
-    },
-    enabled: !!user?.uid && !authLoading,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-  });
-
+  // Mock data fetching effect (replace with actual local storage or other non-Firebase logic if needed)
   React.useEffect(() => {
-    if (promptsAndFoldersData) {
-      const combinedItems = [
-        ...(promptsAndFoldersData.folders || []).map(f => ({...f, type: 'folder' as const})), 
-        ...(promptsAndFoldersData.prompts || []).map(p => ({...p, type: 'prompt' as const}))
-      ];
-      
-      const buildTree = (items: Prompt[], parentId: string | null = null): Prompt[] => {
-        return items
-          .filter(item => item.parentId === parentId)
-          .map(item => ({
-            ...item,
-            children: item.type === 'folder' ? buildTree(items, item.id) : undefined,
-          }))
-          .sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically
-      };
-      setTree(buildTree(combinedItems));
+    if (user) {
+      setIsLoadingPrompts(true);
+      // Simulate fetching
+      setTimeout(() => {
+        // Example: Load from local storage or use hardcoded initial data
+        const localData = localStorage.getItem('promptVerseTree');
+        if (localData) {
+          setTree(JSON.parse(localData));
+        } else {
+           // Basic initial structure if nothing in local storage
+          setTree([
+            {id: 'folder-1', name: 'My First Folder', type: 'folder', children: [
+              {id: 'prompt-1', name: 'Example Prompt', type: 'prompt', content: 'This is an example prompt.', versions: 1, createdAt: new Date(), updatedAt: new Date()}
+            ], createdAt: new Date(), updatedAt: new Date()}
+          ]);
+        }
+        setIsLoadingPrompts(false);
+      }, 500);
     } else {
-      setTree([]);
+      setTree([]); // Clear tree if no user
     }
-  }, [promptsAndFoldersData]);
+  }, [user]);
+
+  // Persist tree to local storage when it changes (example of local persistence)
+  React.useEffect(() => {
+    if (user) {
+      localStorage.setItem('promptVerseTree', JSON.stringify(tree));
+    }
+  }, [tree, user]);
 
 
   const [isSearchOpen, setIsSearchOpen] = React.useState(false);
@@ -380,7 +336,6 @@ export function MainLayout({ children: renderPropChildren }: { children: (props:
 
   const { setTheme, theme } = useTheme();
   
-   // Redirect logic using useEffect to avoid calling router.push during render
   React.useEffect(() => {
     if (!authLoading && !user) {
       const currentPath = window.location.pathname;
@@ -402,178 +357,134 @@ export function MainLayout({ children: renderPropChildren }: { children: (props:
     return () => document.removeEventListener("keydown", down)
   }, []);
   
-  // This loading state is for the initial auth check
   if (authLoading) { 
      return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
   }
-
-  // If finished auth loading, and still no user, and not on auth pages, useEffect above will handle redirect.
-  // This state can be hit briefly before redirect.
-  if (!user && typeof window !== 'undefined' && window.location.pathname !== '/login' && window.location.pathname !== '/signup') {
-    return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
-  }
+  
+  // This check is now primarily handled by the useEffect above.
+  // It can be simplified or removed if the useEffect covers all redirect scenarios.
+  // if (!user && typeof window !== 'undefined' && window.location.pathname !== '/login' && window.location.pathname !== '/signup') {
+  // return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
+  // }
 
 
   const handleSelectPrompt = (prompt: Prompt) => {
     setSelectedPrompt(prompt);
   };
   
-
- const createItemMutation = useMutation({
-    mutationFn: async (data: NewPromptFormValues) => {
-      if (!user) throw new Error("User not authenticated");
-      
-      let parentIdForPrompt: string | null = null;
-      let newFolderId: string | null = null;
-
-      if (data.saveLocationType === "new") {
-        const { folder: newFolder, error: folderError } = await createFolderAction({ 
-            userId: user.uid, 
-            name: data.newFolderName!, 
-            parentId: data.newFolderParentId === 'root' ? null : data.newFolderParentId! 
-        });
-        if (folderError) throw folderError;
-        if (!newFolder) throw new Error("Folder creation failed silently.");
-        newFolderId = newFolder.id;
-        parentIdForPrompt = newFolderId;
-        toast({ title: "Success", description: `Folder "${newFolder.name}" created.` });
-      } else {
-        parentIdForPrompt = data.selectedExistingFolderId === 'root' ? null : (data.selectedExistingFolderId || null);
-      }
-      
-      const { prompt: newPrompt, error: promptError } = await createPromptAction({ 
-          userId: user.uid, 
-          name: data.promptName, 
-          content: data.promptContent, 
-          parentId: parentIdForPrompt 
-      });
-
-      if (promptError) throw promptError;
-      if (!newPrompt) throw new Error("Prompt creation failed silently.");
-      
-      return { newPrompt: convertTimestamps(newPrompt), newFolderId };
-    },
-    onSuccess: (data) => {
-      reactQueryClient.invalidateQueries({ queryKey: ['promptsAndFolders', user?.uid] });
-      setSelectedPrompt(data.newPrompt);
-      setIsNewPromptDialogOpen(false);
-       toast({ title: "Success", description: `"${data.newPrompt.name}" created.` });
-    },
-    onError: (error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    }
-  });
-  
   const handleCreateNewItem = (data: NewPromptFormValues) => {
-    createItemMutation.mutate(data);
+    let parentId: string | null = null;
+    let newFolderCreated = false;
+
+    if (data.saveLocationType === "new") {
+      const newFolder: Prompt = {
+        id: generateNewId(),
+        name: data.newFolderName!,
+        type: 'folder',
+        parentId: data.newFolderParentId === 'root' ? null : data.newFolderParentId!,
+        children: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      setTree(prevTree => addFolderToTree(prevTree, newFolder.parentId || 'root', newFolder));
+      parentId = newFolder.id;
+      newFolderCreated = true;
+      toast({ title: "Success", description: `Folder "${newFolder.name}" created locally.` });
+    } else {
+      parentId = data.selectedExistingFolderId === 'root' ? null : (data.selectedExistingFolderId || null);
+    }
+    
+    const newPrompt: Prompt = {
+        id: generateNewId(),
+        name: data.promptName,
+        content: data.promptContent,
+        type: 'prompt',
+        versions: 1,
+        parentId: parentId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        history: [],
+    };
+
+    if (parentId && !newFolderCreated) { // Add to existing folder
+        setTree(prevTree => addPromptToTree(prevTree, parentId!, newPrompt));
+    } else if (newFolderCreated) { // Add to newly created folder (which is already in tree)
+        setTree(prevTree => addPromptToTree(prevTree, parentId!, newPrompt));
+    }
+     else { // Add to root
+        setTree(prevTree => [...prevTree, newPrompt]);
+    }
+    
+    setSelectedPrompt(newPrompt);
+    setIsNewPromptDialogOpen(false);
+    toast({ title: "Success", description: `"${newPrompt.name}" created locally.` });
   };
   
-  const updatePromptMutation = useMutation({
-    mutationFn: async (newContent: string) => {
-      if (!selectedPrompt || selectedPrompt.type !== 'prompt' || !user) throw new Error("Invalid operation: No prompt selected or user not authenticated.");
-      
-      const { updatedPrompt, error } = await updatePromptAction({ 
-        promptId: selectedPrompt.id, 
-        newContent, 
-        userId: user.uid 
-      });
-      if (error) throw error;
-      if (!updatedPrompt) throw new Error("Prompt update failed silently.");
-      return convertTimestamps(updatedPrompt);
-    },
-    onSuccess: (updatedPrompt) => {
-      reactQueryClient.invalidateQueries({ queryKey: ['promptsAndFolders', user?.uid] });
-      reactQueryClient.invalidateQueries({ queryKey: ['promptVersions', selectedPrompt?.id] });
-      setSelectedPrompt(updatedPrompt);
-      setIsEditPromptDialogOpen(false);
-      toast({ title: "Success", description: `Prompt "${updatedPrompt.name}" updated.` });
-    },
-    onError: (error) => {
-      toast({ title: "Error updating prompt", description: error.message, variant: "destructive" });
-    }
-  });
-
   const handleSaveChangesToPrompt = (newContent: string) => {
-    updatePromptMutation.mutate(newContent);
+    if (!selectedPrompt || selectedPrompt.type !== 'prompt') {
+      toast({ title: "Error", description: "No prompt selected to update.", variant: "destructive" });
+      return;
+    }
+    setTree(prevTree => updatePromptInTree(prevTree, selectedPrompt.id, newContent));
+    // Update selectedPrompt with new content and version
+    const updatedPrompt = tree.flatMap(p => p.type === 'folder' && p.children ? p.children : [p]).find(p => p.id === selectedPrompt.id);
+    if (updatedPrompt) {
+        const newHistoryEntry: PromptVersion = {
+            id: generateNewId(),
+            versionNumber: updatedPrompt.versions || 1, // This should be previous version number
+            content: selectedPrompt.content || "", 
+            timestamp: selectedPrompt.updatedAt || new Date(),
+        };
+         setSelectedPrompt({
+            ...updatedPrompt, 
+            content: newContent,
+            versions: (updatedPrompt.versions || 1) + 1,
+            updatedAt: new Date(),
+            history: [...(updatedPrompt.history || []), newHistoryEntry].sort((a,b) => b.versionNumber - a.versionNumber)
+        });
+    }
+    setIsEditPromptDialogOpen(false);
+    toast({ title: "Success", description: `Prompt "${selectedPrompt.name}" updated locally.` });
   };
 
-  const deleteItemMutation = useMutation({
-    mutationFn: async (item: {id: string, type: 'prompt' | 'folder', name: string}) => {
-      if (!user) throw new Error("User not authenticated");
-      let error;
-      if (item.type === 'prompt') {
-        ({ error } = await deletePromptAction({ promptId: item.id, userId: user.uid }));
-      } else {
-        // Firestore delete for folders might require recursive deletion of children or a cloud function
-        // For now, assuming a simple delete or that backend handles children.
-        // This might need to be adjusted based on actual backend folder delete logic.
-        ({ error } = await deletePromptAction({ promptId: item.id, userId: user.uid })); // Placeholder, needs deleteFolderAction
-         toast({ title: "Folder Deletion Info", description: `Folder deletion for "${item.name}" might require recursive logic not yet fully implemented.`, variant: "default"});
-      }
-      if (error) throw error;
-      return item;
-    },
-    onSuccess: (_, variables) => {
-      reactQueryClient.invalidateQueries({ queryKey: ['promptsAndFolders', user?.uid] });
-      toast({ title: "Success", description: `${variables.type === 'prompt' ? 'Prompt' : 'Folder'} "${variables.name}" deleted.` });
-      if (selectedPrompt?.id === variables.id) {
-        setSelectedPrompt(null);
-      }
-      setPromptToDelete(null);
-    },
-    onError: (error, variables) => {
-      toast({ title: `Error deleting ${variables.type}`, description: error.message, variant: "destructive" });
-      setPromptToDelete(null);
-    }
-  });
-
-  const handleDeletePromptRequest = (promptId: string, promptName: string, itemType: "prompt" | "folder") => {
-    setPromptToDelete({id: promptId, name: promptName, type: itemType});
+  const handleDeletePromptRequest = (itemId: string, itemName: string, itemType: "prompt" | "folder") => {
+    setPromptToDelete({id: itemId, name: itemName, type: itemType});
   };
 
   const confirmDeletePrompt = () => {
     if (promptToDelete) {
-      deleteItemMutation.mutate(promptToDelete);
+      setTree(prevTree => removeItemFromTree(prevTree, promptToDelete.id));
+      toast({ title: "Success", description: `${promptToDelete.type === 'prompt' ? 'Prompt' : 'Folder'} "${promptToDelete.name}" deleted locally.` });
+      if (selectedPrompt?.id === promptToDelete.id) {
+        setSelectedPrompt(null);
+      }
+      setPromptToDelete(null);
     }
   };
   
-  const branchPromptMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedPrompt || selectedPrompt.type !== 'prompt' || !user) {
-        throw new Error("Please select a prompt to branch.");
-      }
-      const { branchedPrompt, error } = await branchPromptAction({ 
-        originalPrompt: selectedPrompt, 
-        userId: user.uid 
-      });
-      if (error) throw error;
-      if (!branchedPrompt) throw new Error("Branching prompt failed silently.");
-      return convertTimestamps(branchedPrompt);
-    },
-    onSuccess: (branchedPrompt) => {
-      reactQueryClient.invalidateQueries({ queryKey: ['promptsAndFolders', user?.uid] });
-      setSelectedPrompt(branchedPrompt);
-      toast({ title: "Prompt Branched", description: `Created branch: "${branchedPrompt.name}".` });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Cannot Branch", description: error.message, variant: "destructive" });
-    }
-  });
   const handleBranchPrompt = () => {
-    branchPromptMutation.mutate();
+     if (!selectedPrompt || selectedPrompt.type !== 'prompt') {
+        toast({ title: "Error", description: "Please select a prompt to branch.", variant: "destructive" });
+        return;
+    }
+    const branchedPrompt: Prompt = {
+        ...selectedPrompt,
+        id: generateNewId(),
+        name: `${selectedPrompt.name} (Branch)`,
+        versions: 1, // Reset versions for branch
+        history: [], // Branched prompt starts with no history from parent
+        createdAt: new Date(),
+        updatedAt: new Date(),
+    };
+    // Add to the same parent folder or root as the original
+    if (selectedPrompt.parentId) {
+        setTree(prevTree => addPromptToTree(prevTree, selectedPrompt.parentId!, branchedPrompt));
+    } else {
+        setTree(prevTree => [...prevTree, branchedPrompt]);
+    }
+    setSelectedPrompt(branchedPrompt);
+    toast({ title: "Prompt Branched", description: `Created branch: "${branchedPrompt.name}" locally.` });
   };
-
-  const {data: versionHistoryData, isLoading: isLoadingVersionHistory} = useQuery<PromptVersion[], Error>({
-    queryKey: ['promptVersions', promptForHistory?.id, user?.uid],
-    queryFn: async () => {
-      if (!promptForHistory?.id || !user?.uid) return [];
-      const { versions, error } = await getPromptVersionsAction({ promptId: promptForHistory.id, userId: user.uid });
-      if (error) throw error;
-      return convertTimestamps(versions || []);
-    },
-    enabled: !!promptForHistory?.id && !!user?.uid && isVersionHistoryDialogOpen,
-  });
-
 
   const handleOpenVersionHistory = () => {
     if (selectedPrompt && selectedPrompt.type === 'prompt') {
@@ -597,8 +508,8 @@ export function MainLayout({ children: renderPropChildren }: { children: (props:
   const handleLogout = async () => {
     try {
       await appSignOut();
-      reactQueryClient.clear(); 
-      // router.push handled by AuthContext's onAuthStateChanged or signOut effect
+      // queryClient.clear(); // No specific Tanstack Query data to clear for now
+      // router.push handled by AuthContext's signOut
     } catch (error) {
       toast({ title: "Logout Failed", description: (error as Error).message, variant: "destructive" });
     }
@@ -607,59 +518,87 @@ export function MainLayout({ children: renderPropChildren }: { children: (props:
   const handleOpenLoginDialog = () => router.push('/login');
   const handleOpenSignupDialog = () => router.push('/signup');
 
-  const exportMutation = useMutation({
-    mutationFn: async (format: "json" | "csv") => {
-      if (!user) throw new Error("User not authenticated.");
-      const { data, error } = await exportPromptsAction({ userId: user.uid, format });
-      if (error) throw error;
-      if (!data) throw new Error("Export failed: No data returned.");
-
-      const blob = new Blob([data], { type: format === 'json' ? 'application/json' : 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `prompts.${format}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    },
-    onSuccess: () => {
-      toast({ title: "Export Successful", description: "Your prompts have been exported." });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Export Failed", description: error.message, variant: "destructive" });
-    },
-  });
-
   const handleExport = (format: "json" | "csv") => {
-    exportMutation.mutate(format);
-  };
+    if (!tree || tree.length === 0) {
+        toast({ title: "Export Failed", description: "No data to export.", variant: "destructive"});
+        return;
+    }
+    let dataToExport = "";
+    let mimeType = "";
+    let fileName = "";
 
-  const importMutation = useMutation({
-    mutationFn: async (file: File) => {
-      if (!user) throw new Error("User not authenticated.");
-      const content = await file.text();
-      const { error } = await importPromptsAction({ userId: user.uid, fileContent: content, format: file.name.endsWith('.json') ? 'json' : 'csv' });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      reactQueryClient.invalidateQueries({ queryKey: ['promptsAndFolders', user?.uid] });
-      toast({ title: "Import Successful", description: "Prompts have been imported." });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Import Failed", description: error.message, variant: "destructive" });
-    },
-  });
+    if (format === 'json') {
+        dataToExport = JSON.stringify(tree, null, 2);
+        mimeType = 'application/json';
+        fileName = 'prompts.json';
+    } else if (format === 'csv') {
+        // Flatten tree for CSV - this is a simplified example
+        const flatPrompts = tree.reduce((acc, item) => {
+            if (item.type === 'prompt') acc.push(item);
+            if (item.type === 'folder' && item.children) {
+                item.children.forEach(child => {
+                    if (child.type === 'prompt') acc.push({...child, parentFolderName: item.name});
+                });
+            }
+            return acc;
+        }, [] as (Prompt & {parentFolderName?: string})[]);
+
+        if (flatPrompts.length === 0) {
+             toast({ title: "Export Failed", description: "No prompts to export in CSV format.", variant: "destructive"});
+             return;
+        }
+        const headers = "id,name,content,versions,isFavorite,parentId,parentFolderName,createdAt,updatedAt";
+        const rows = flatPrompts.map(p => 
+            [p.id, `"${p.name}"`, `"${p.content?.replace(/"/g, '""') || ""}"`, p.versions, p.isFavorite, p.parentId || "", p.parentFolderName || "", p.createdAt?.toISOString(), p.updatedAt?.toISOString()].join(',')
+        );
+        dataToExport = `${headers}\n${rows.join('\n')}`;
+        mimeType = 'text/csv';
+        fileName = 'prompts.csv';
+    } else {
+        toast({ title: "Export Failed", description: "Invalid export format.", variant: "destructive"});
+        return;
+    }
+      
+    const blob = new Blob([dataToExport], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast({ title: "Export Successful", description: "Your prompts have been exported locally." });
+  };
 
   const handleImport = () => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.json,.csv';
+    input.accept = '.json,.csv'; // For CSV, a more robust parser would be needed
     input.onchange = (event) => {
       const file = (event.target as HTMLInputElement).files?.[0];
       if (file) {
-        importMutation.mutate(file);
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const content = e.target?.result as string;
+                if (file.name.endsWith('.json')) {
+                    const importedTree = JSON.parse(content) as Prompt[];
+                    // Basic validation or merge strategy needed here
+                    setTree(importedTree); 
+                    toast({ title: "Import Successful", description: "Prompts imported from JSON." });
+                } else if (file.name.endsWith('.csv')) {
+                    // CSV import logic is more complex and requires parsing
+                    // For now, just show a message
+                    toast({ title: "CSV Import", description: "CSV import is complex and not fully implemented for tree structures. Please use JSON for now.", variant: "default" });
+                } else {
+                    toast({ title: "Import Failed", description: "Unsupported file type.", variant: "destructive" });
+                }
+            } catch (err) {
+                toast({ title: "Import Failed", description: (err as Error).message, variant: "destructive" });
+            }
+        };
+        reader.readAsText(file);
       }
     };
     input.click();
@@ -766,7 +705,6 @@ export function MainLayout({ children: renderPropChildren }: { children: (props:
             <DropdownMenuContent side="top" align="start" className="w-56 bg-popover">
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {/* <DropdownMenuItem onClick={() => router.push('/profile')} > Profile </DropdownMenuItem>  */}
               <DropdownMenuItem onClick={() => toast({ title: "Settings", description: "Settings page not yet implemented."})}><Settings className="mr-2 h-4 w-4" /> Settings</DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
@@ -837,7 +775,7 @@ export function MainLayout({ children: renderPropChildren }: { children: (props:
               )}
               {promptsError && (
                 <div className="text-destructive p-4 bg-destructive/10 rounded-md">
-                  Error loading data: {promptsError.message}. Please try refreshing. If the issue persists, check your Firebase configuration.
+                  Error loading data: {promptsError.message}.
                 </div>
               )}
               {!isLoadingPrompts && !promptsError && (
@@ -878,12 +816,8 @@ export function MainLayout({ children: renderPropChildren }: { children: (props:
             <CommandEmpty>No results found.</CommandEmpty>
             <CommandGroup heading="Suggestions">
               <CommandItem onSelect={() => { 
-                  const demoPrompt = tree.flatMap(p => 
-                      p.type === 'folder' && p.children ? 
-                      p.children.filter(c => c.type === 'prompt') : 
-                      (p.type === 'prompt' ? [p] : [])
-                  ).flat()[0];
-                  if(demoPrompt) { handleSelectPrompt(demoPrompt); }
+                  const firstPrompt = tree.find(item => item.type === 'prompt') || tree.flatMap(item => item.type === 'folder' ? item.children || [] : []).find(child => child.type === 'prompt');
+                  if(firstPrompt) { handleSelectPrompt(firstPrompt); }
                   else { toast({title: "No prompts to select."}); }
                   setIsSearchOpen(false); 
               }}>
@@ -966,14 +900,13 @@ export function MainLayout({ children: renderPropChildren }: { children: (props:
             <AlertDialogHeader>
               <AlertDialogTitle>Are you sure you want to delete "{promptToDelete.name}"?</AlertDialogTitle>
               <AlertDialogDescription>
-                This action cannot be undone. This will permanently delete the {promptToDelete.type} {promptToDelete.type === 'folder' ? 'and all its contents' : 'and all its versions'}.
+                This action cannot be undone. This will permanently delete the {promptToDelete.type} {promptToDelete.type === 'folder' && promptToDelete.id !== 'root' ? 'and all its contents' : 'and all its versions'}.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel onClick={() => setPromptToDelete(null)}>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmDeletePrompt} disabled={deleteItemMutation.isPending}>
-                {deleteItemMutation.isPending ? <LoadingSpinner size="xs" className="mr-2" /> : null}
-                {deleteItemMutation.isPending ? "Deleting..." : "Delete"}
+              <AlertDialogAction onClick={confirmDeletePrompt}>
+                Delete
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

@@ -37,36 +37,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Placeholder signUp function
   const signUp = async (email: string, password: string, firstName: string, lastName: string) => {
-    toast({ title: "Sign Up Unavailable", description: "Authentication is not configured.", variant: "destructive" });
-    console.warn("Attempted to sign up, but Firebase/Auth is not configured.");
-    return { user: null, error: new Error("Authentication not configured.") };
+    setLoading(true);
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    const mockUser: AppUser = { 
+        uid: `mock-user-${Date.now()}`, 
+        email, 
+        displayName: `${firstName} ${lastName}`, 
+        photoURL: null, 
+        emailVerified: false, // Typically false until confirmed
+        firstName, 
+        lastName,
+        createdAt: new Date()
+    };
+    setUser(mockUser);
+    setLoading(false);
+    toast({ title: "Sign Up Successful (Mock)", description: "Welcome! Please proceed to login." });
+    router.push('/login'); // Redirect to login after mock signup
+    return { user: mockUser, error: null };
   };
 
   // Placeholder signIn function
   const signIn = async (email: string, password: string) => {
-    toast({ title: "Sign In Unavailable", description: "Authentication is not configured.", variant: "destructive" });
-    console.warn("Attempted to sign in, but Firebase/Auth is not configured.");
-    // Example of mocking a user after "login" for UI testing
-    // const mockUser: AppUser = { uid: 'mock-user-123', email, displayName: 'Mock User', photoURL: null, emailVerified: true, firstName: 'Mock', lastName: 'User' };
-    // setUser(mockUser);
-    // router.push('/');
-    // return { user: mockUser, error: null };
-    return { user: null, error: new Error("Authentication not configured.") };
+    setLoading(true);
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    // This is a mock user. In a real app, you'd get this from your auth provider.
+    const mockUser: AppUser = { 
+        uid: 'mock-user-123', 
+        email, 
+        displayName: 'Mock User', 
+        photoURL: `https://picsum.photos/seed/mock-user-123/40/40`, 
+        emailVerified: true, 
+        firstName: 'Mock', 
+        lastName: 'User',
+        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7) // 7 days ago
+    };
+    setUser(mockUser);
+    setLoading(false);
+    toast({ title: "Sign In Successful (Mock)", description: "Welcome back!" });
+    router.push('/');
+    return { user: mockUser, error: null };
   };
 
   // Placeholder signOut function
   const signOut = async () => {
-    toast({ title: "Sign Out Unavailable", description: "Authentication is not configured." });
-    console.warn("Attempted to sign out, but Firebase/Auth is not configured.");
+    setLoading(true);
+    await new Promise(resolve => setTimeout(resolve, 500));
     setUser(null);
+    setLoading(false);
+    toast({ title: "Signed Out (Mock)", description: "You have been successfully signed out." });
     router.push('/login'); 
   };
 
   // Placeholder sendPasswordReset function
   const sendPasswordReset = async (email: string) => {
-    toast({ title: "Password Reset Unavailable", description: "Authentication is not configured.", variant: "destructive" });
-    console.warn("Attempted to send password reset, but Firebase/Auth is not configured.");
-    return { error: new Error("Authentication not configured.") };
+    setLoading(true);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    setLoading(false);
+    toast({ title: "Password Reset Email Sent (Mock)", description: `If an account exists for ${email}, a reset link has been sent.` });
+    return { error: null };
   };
 
   return (
