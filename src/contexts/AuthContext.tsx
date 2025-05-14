@@ -1,24 +1,13 @@
 // src/contexts/AuthContext.tsx
 "use client";
 
-import type { User as FirebaseUser, AuthError } from 'firebase/auth';
-import { 
-    createUserWithEmailAndPassword, 
-    onAuthStateChanged, 
-    sendPasswordResetEmail, 
-    signInWithEmailAndPassword, 
-    signOut as firebaseSignOut,
-    updateProfile
-} from 'firebase/auth';
 import type { ReactNode} from 'react';
 import { createContext, useContext, useEffect, useState } from 'react';
-import { auth as firebaseAuth, db as firebaseDb } from '@/lib/firebase/firebase'; // Consolidated import
 import { useToast } from '@/hooks/use-toast';
-import { doc, setDoc, getDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { useRouter } from 'next/navigation';
 
-
-// Extended User type to include displayName and photoURL from FirebaseUser
-export interface AppUser extends Omit<FirebaseUser, 'providerData' | 'toJSON'> { 
+// Simplified AppUser interface without Firebase types
+export interface AppUser { 
   uid: string;
   email: string | null;
   displayName: string | null;
@@ -26,187 +15,58 @@ export interface AppUser extends Omit<FirebaseUser, 'providerData' | 'toJSON'> {
   emailVerified: boolean;
   firstName?: string;
   lastName?: string;
-  createdAt?: Timestamp | string; // Firestore Timestamp or ISO string
-}
-
-
-interface Session { // Session is typically managed by Firebase itself, this might be simplified
-  user: AppUser | null;
-  // token?: string | null; // Handled by Firebase SDK internally
-  // expiresAt?: number | null; // Handled by Firebase SDK internally
+  createdAt?: Date | string; 
 }
 
 type AuthContextType = {
   user: AppUser | null;
-  // session: Session | null; // Simplified, as Firebase handles session internally
   loading: boolean;
-  signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<{ user: AppUser | null; error: AuthError | null }>;
-  signIn: (email: string, password: string) => Promise<{ user: AppUser | null; error: AuthError | null }>;
+  signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<{ user: AppUser | null; error: Error | null }>;
+  signIn: (email: string, password: string) => Promise<{ user: AppUser | null; error: Error | null }>;
   signOut: () => Promise<void>;
-  sendPasswordReset: (email: string) => Promise<{ error: AuthError | null }>;
+  sendPasswordReset: (email: string) => Promise<{ error: Error | null }>;
 };
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // Set to false as no async auth check initially
   const { toast } = useToast();
+  const router = useRouter();
 
-  useEffect(() => {
-    if (!firebaseAuth) {
-      console.error("Firebase Auth service is not available. Check Firebase configuration in .env and firebase.ts.");
-      setLoading(false);
-      // Optionally, you could set an error state here to inform the user
-      // or redirect to an error page / show a global notification.
-      return;
-    }
-
-    const unsubscribe = onAuthStateChanged(firebaseAuth, async (fbUser) => {
-      if (fbUser) {
-        if (!firebaseDb) {
-          console.error("Firestore service is not available. Check Firebase configuration.");
-          setUser(mapFirebaseUserToAppUser(fbUser)); // Set basic user data if DB is down
-          setLoading(false);
-          return;
-        }
-        try {
-          const userDocRef = doc(firebaseDb, "users", fbUser.uid);
-          const userDoc = await getDoc(userDocRef);
-          
-          const appUser: AppUser = {
-            ...mapFirebaseUserToAppUser(fbUser),
-            ...(userDoc.exists() ? (userDoc.data() as Omit<AppUser, keyof FirebaseUser>) : {}),
-          };
-          setUser(appUser);
-        } catch (dbError) {
-          console.error("Error fetching user data from Firestore:", dbError);
-          toast({ title: "Database Error", description: "Could not load user profile.", variant: "destructive" });
-          setUser(mapFirebaseUserToAppUser(fbUser)); // Fallback to auth data only
-        }
-      } else {
-        setUser(null);
-      }
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [toast]);
-
-  const mapFirebaseUserToAppUser = (fbUser: FirebaseUser): AppUser => ({
-    uid: fbUser.uid,
-    email: fbUser.email,
-    displayName: fbUser.displayName,
-    photoURL: fbUser.photoURL,
-    emailVerified: fbUser.emailVerified,
-    // other fields from FirebaseUser if needed
-  });
-
+  // Placeholder signUp function
   const signUp = async (email: string, password: string, firstName: string, lastName: string) => {
-    if (!firebaseAuth || !firebaseDb) {
-      toast({ title: "Service Unavailable", description: "Firebase is not configured correctly.", variant: "destructive" });
-      return { user: null, error: { code: "auth/internal-error", message: "Firebase not configured." } as AuthError };
-    }
-    setLoading(true);
-    try {
-      const userCredential = await createUserWithEmailAndPassword(firebaseAuth, email, password);
-      const fbUser = userCredential.user;
-      
-      await updateProfile(fbUser, { displayName: `${firstName} ${lastName}` });
-
-      const userDocRef = doc(firebaseDb, "users", fbUser.uid);
-      const userData = {
-        uid: fbUser.uid,
-        email: fbUser.email,
-        firstName,
-        lastName,
-        displayName: `${firstName} ${lastName}`,
-        createdAt: serverTimestamp(),
-      };
-      await setDoc(userDocRef, userData);
-      
-      const appUser = { ...mapFirebaseUserToAppUser(fbUser), ...userData };
-      setUser(appUser); 
-      toast({ title: "Sign Up Successful", description: "Welcome to PromptVerse!" });
-      return { user: appUser, error: null };
-
-    } catch (error) {
-      const authError = error as AuthError;
-      console.error("Sign up error:", authError.code, authError.message);
-      toast({ title: "Sign Up Failed", description: authError.message, variant: "destructive" });
-      return { user: null, error: authError };
-    } finally {
-      setLoading(false);
-    }
+    toast({ title: "Sign Up Unavailable", description: "Authentication is not configured.", variant: "destructive" });
+    console.warn("Attempted to sign up, but Firebase/Auth is not configured.");
+    return { user: null, error: new Error("Authentication not configured.") };
   };
 
+  // Placeholder signIn function
   const signIn = async (email: string, password: string) => {
-    if (!firebaseAuth || !firebaseDb) {
-      toast({ title: "Service Unavailable", description: "Firebase is not configured correctly.", variant: "destructive" });
-      return { user: null, error: { code: "auth/internal-error", message: "Firebase not configured." } as AuthError };
-    }
-    setLoading(true);
-    try {
-      const userCredential = await signInWithEmailAndPassword(firebaseAuth, email, password);
-      const fbUser = userCredential.user;
-      
-      const userDocRef = doc(firebaseDb, "users", fbUser.uid);
-      const userDoc = await getDoc(userDocRef);
-
-      const appUser: AppUser = {
-        ...mapFirebaseUserToAppUser(fbUser),
-        ...(userDoc.exists() ? (userDoc.data() as Omit<AppUser, keyof FirebaseUser>) : {})
-      };
-      setUser(appUser);
-      toast({ title: "Sign In Successful", description: "Welcome back!" });
-      return { user: appUser, error: null };
-    } catch (error) {
-      const authError = error as AuthError;
-      console.error("Sign in error:", authError.code, authError.message);
-      toast({ title: "Sign In Failed", description: authError.message, variant: "destructive" });
-      return { user: null, error: authError };
-    } finally {
-      setLoading(false);
-    }
+    toast({ title: "Sign In Unavailable", description: "Authentication is not configured.", variant: "destructive" });
+    console.warn("Attempted to sign in, but Firebase/Auth is not configured.");
+    // Example of mocking a user after "login" for UI testing
+    // const mockUser: AppUser = { uid: 'mock-user-123', email, displayName: 'Mock User', photoURL: null, emailVerified: true, firstName: 'Mock', lastName: 'User' };
+    // setUser(mockUser);
+    // router.push('/');
+    // return { user: mockUser, error: null };
+    return { user: null, error: new Error("Authentication not configured.") };
   };
 
+  // Placeholder signOut function
   const signOut = async () => {
-    if (!firebaseAuth) {
-      toast({ title: "Service Unavailable", description: "Firebase Auth is not configured.", variant: "destructive" });
-      return;
-    }
-    setLoading(true);
-    try {
-      await firebaseSignOut(firebaseAuth); 
-      setUser(null);
-      toast({ title: "Signed Out", description: "You have been successfully signed out." });
-    } catch (error) {
-      const authError = error as AuthError;
-      console.error("Sign out error:", authError.code, authError.message);
-      toast({ title: "Sign Out Failed", description: authError.message, variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
+    toast({ title: "Sign Out Unavailable", description: "Authentication is not configured." });
+    console.warn("Attempted to sign out, but Firebase/Auth is not configured.");
+    setUser(null);
+    router.push('/login'); 
   };
 
+  // Placeholder sendPasswordReset function
   const sendPasswordReset = async (email: string) => {
-     if (!firebaseAuth) {
-      toast({ title: "Service Unavailable", description: "Firebase Auth is not configured.", variant: "destructive" });
-      return { error: { code: "auth/internal-error", message: "Firebase Auth not configured." } as AuthError };
-    }
-    setLoading(true);
-    try {
-      await sendPasswordResetEmail(firebaseAuth, email);
-      toast({ title: "Password Reset Email Sent", description: "Check your inbox for instructions." });
-      return { error: null };
-    } catch (error) {
-      const authError = error as AuthError;
-      console.error("Password reset error:", authError.code, authError.message);
-      toast({ title: "Password Reset Failed", description: authError.message, variant: "destructive" });
-      return { error: authError };
-    } finally {
-      setLoading(false);
-    }
+    toast({ title: "Password Reset Unavailable", description: "Authentication is not configured.", variant: "destructive" });
+    console.warn("Attempted to send password reset, but Firebase/Auth is not configured.");
+    return { error: new Error("Authentication not configured.") };
   };
 
   return (

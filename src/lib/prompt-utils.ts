@@ -1,4 +1,15 @@
-import type { Prompt, PromptVersion } from '@/components/layout/main-layout';
+import type { Prompt } from '@/components/layout/main-layout';
+
+// This type is also defined in main-layout.tsx, ensure they are consistent or one is imported
+export interface PromptVersion {
+  id: string;
+  versionNumber: number;
+  content: string;
+  timestamp: Date; // Changed from Firebase Timestamp
+  userId?: string;
+  promptId?: string;
+}
+
 
 export const generateNewId = () => `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
@@ -33,6 +44,9 @@ export function generateFolderOptions(
   });
   return options;
 }
+
+// The following functions modify the tree structure in memory.
+// If backend is removed, these would operate on local state.
 
 export function addPromptToTree(
   tree: Prompt[],
@@ -90,16 +104,16 @@ export function updatePromptInTree(
     if (item.id === targetId && item.type === 'prompt' && item.content !== undefined) {
       const previousVersionNumber = item.versions || 1; 
       const newHistoryEntry: PromptVersion = {
-        id: generateNewId(), // Assuming PromptVersion also needs an ID
+        id: generateNewId(), 
         versionNumber: previousVersionNumber,
-        content: item.content, // Store the old content
-        timestamp: new Date(), // Timestamp of when this old version was superseded
+        content: item.content, 
+        timestamp: new Date(), 
       };
       return {
         ...item,
-        content: newContent, // New content becomes current
-        versions: previousVersionNumber + 1, // Increment total versions
-        history: [...(item.history || []), newHistoryEntry].sort((a,b) => b.versionNumber - a.versionNumber), // Add to history and keep sorted
+        content: newContent, 
+        versions: previousVersionNumber + 1, 
+        history: [...(item.history || []), newHistoryEntry].sort((a,b) => b.versionNumber - a.versionNumber), 
       };
     }
     if (item.children) {
@@ -140,4 +154,16 @@ export function addPromptNextToSibling(
   }
 
   return { updatedTree: items, success: false }; // Sibling not found
+}
+
+export function removeItemFromTree(items: Prompt[], itemId: string): Prompt[] {
+  return items.filter(item => {
+    if (item.id === itemId) {
+      return false; // Remove this item
+    }
+    if (item.children) {
+      item.children = removeItemFromTree(item.children, itemId);
+    }
+    return true;
+  });
 }

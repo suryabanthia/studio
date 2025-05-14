@@ -1,3 +1,4 @@
+// src/components/dialogs/version-history-dialog.tsx
 "use client";
 
 import * as React from "react";
@@ -13,7 +14,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type { Prompt, PromptVersion } from "@/components/layout/main-layout";
+import type { Prompt, PromptVersion } from "@/components/layout/main-layout"; // PromptVersion uses Date
 import { format } from 'date-fns';
 
 interface VersionHistoryDialogProps {
@@ -31,36 +32,24 @@ export function VersionHistoryDialog({
   if (!prompt) return null;
 
   // Construct a list of all versions for display, including the current content as the latest version.
-  // History is assumed to be sorted descending by versionNumber.
   const allDisplayVersions: PromptVersion[] = [];
 
   if (prompt.content !== undefined && prompt.versions !== undefined) {
-    // Add current version (the one in prompt.content)
-    // The timestamp for the current version is a bit conceptual here.
-    // It's the "latest" or when it became current. For mock data or if no history, might use an arbitrary old date.
-    // If history exists, its timestamp is effectively "now" or the time it was last saved.
-    let currentVersionTimestamp = new Date(); // Default to now
-    if (prompt.history && prompt.history.length > 0) {
-        // If there's history, the current content was established after the last historical item.
-        // This isn't perfectly accurate without a "lastModified" on the prompt itself.
-        // For display, this should be fine.
-    } else if (prompt.versions === 1) {
-        // If it's the first version, its timestamp can be an older "creation" time.
-        // This is hard to get from current data, so we use a placeholder.
-        // In a real app, prompts would have creation/modification timestamps.
-         currentVersionTimestamp = new Date(Date.now() - Math.random() * 10 * 24 * 60 * 60 * 1000); // Mock creation time
-    }
-
-
     allDisplayVersions.push({
+      id: `${prompt.id}-current`, // A unique ID for the current state if not versioned explicitly
       versionNumber: prompt.versions,
       content: prompt.content,
-      timestamp: currentVersionTimestamp, 
+      timestamp: prompt.updatedAt || new Date(), // Use updatedAt or current date
     });
   }
 
   if (prompt.history) {
-    allDisplayVersions.push(...prompt.history);
+    // Ensure history timestamps are Date objects
+    const historyWithDates = prompt.history.map(v => ({
+      ...v,
+      timestamp: new Date(v.timestamp) // Ensure it's a Date object
+    }));
+    allDisplayVersions.push(...historyWithDates);
   }
   
   // Deduplicate by versionNumber (just in case) and sort descending
@@ -80,23 +69,13 @@ export function VersionHistoryDialog({
           <div className="space-y-4 py-4">
             {uniqueSortedVersions.length > 0 ? (
               uniqueSortedVersions.map((version, index) => (
-                <Card key={version.versionNumber} className="bg-background/80 shadow-md">
+                <Card key={version.id || version.versionNumber} className="bg-background/80 shadow-md">
                   <CardHeader className="py-3 px-4">
                     <div className="flex justify-between items-center">
                       <CardTitle className="text-md">
                         Version {version.versionNumber}
                         {index === 0 && prompt.content !== undefined && " (Current)"}
                       </CardTitle>
-                       {/* Add Revert button for past versions - future enhancement
-                       {index !== 0 && onRevert && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => onRevert(prompt.id, version)}
-                        >
-                          Revert to this version
-                        </Button>
-                      )} */}
                     </div>
                     <CardDescription className="text-xs">
                       Saved on: {format(new Date(version.timestamp), "MMM d, yyyy 'at' h:mm a")}
