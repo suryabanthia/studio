@@ -1,6 +1,6 @@
 import type { Prompt, PromptVersion } from '@/components/layout/main-layout';
 
-export const newId = () => `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+export const generateNewId = () => `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
 export interface FolderOption {
   value: string;
@@ -90,6 +90,7 @@ export function updatePromptInTree(
     if (item.id === targetId && item.type === 'prompt' && item.content !== undefined) {
       const previousVersionNumber = item.versions || 1; 
       const newHistoryEntry: PromptVersion = {
+        id: generateNewId(), // Assuming PromptVersion also needs an ID
         versionNumber: previousVersionNumber,
         content: item.content, // Store the old content
         timestamp: new Date(), // Timestamp of when this old version was superseded

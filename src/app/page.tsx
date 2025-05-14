@@ -1,9 +1,10 @@
+// src/app/page.tsx
 "use client"; 
 
 import { MainLayout, type PageRenderProps } from "@/components/layout/main-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, Sparkles, Star, UploadCloud, DownloadCloud, PlusCircle, Palette, History, LogIn, UserPlus, Folder as FolderIcon } from "lucide-react";
+import { FileText, Sparkles, Star, UploadCloud, DownloadCloud, PlusCircle, Palette, History, LogIn, UserPlus } from "lucide-react";
 import Image from "next/image";
 import { useToast } from "@/hooks/use-toast"; 
 import { useAuth } from "@/contexts/AuthContext"; 
@@ -32,7 +33,6 @@ function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginD
   };
 
   const handleExploreFeatures = () => {
-    // This could navigate to a features page or open a modal
     toast({ title: "Explore Features", description: "Discover the full power of PromptVerse!" });
   };
 
@@ -55,8 +55,8 @@ function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginD
       if (openLoginDialog) openLoginDialog(); else router.push('/login');
       return;
     }
-    const importButton = document.getElementById('import-button-mainlayout'); // Ensure this ID exists on an actual button if used
-    if (importButton instanceof HTMLButtonElement || importButton instanceof HTMLInputElement) { // Type guard for click
+    const importButton = document.getElementById('import-button-mainlayout'); 
+    if (importButton instanceof HTMLButtonElement || importButton instanceof HTMLInputElement) { 
       importButton.click();
     } else {
         toast({ title: "Info", description: "Use the 'Import' button in the header to import prompts.", variant: "default" });
@@ -73,7 +73,7 @@ function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginD
   };
 
 
-  if (authLoading) {
+  if (authLoading && !user) { // Show loading spinner only if auth is loading AND user is not yet available
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center p-6">
          <LoadingSpinner size="lg" />
@@ -107,14 +107,13 @@ function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginD
     );
   }
 
-
   return (
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card className="col-span-1 md:col-span-2 lg:col-span-3 bg-card shadow-lg hover:shadow-xl transition-shadow duration-300">
           <CardHeader className="pb-2">
             <CardTitle className="text-3xl font-bold welcome-title-override">Welcome to PromptVerse!</CardTitle>
             <CardDescription className="text-lg welcome-description-override">
-              Your central hub for managing, versioning, and optimizing AI prompts.
+              Your central hub for managing, versioning,and optimizing AI prompts.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col md:flex-row items-center gap-6">
@@ -147,7 +146,6 @@ function DashboardContent({ openNewPromptDialog, openOptimizerDialog, openLoginD
           </CardHeader>
           <CardContent>
             <ul className="space-y-2">
-              {/* This section can be populated with actual recent prompts later */}
               <li className="flex justify-between items-center p-2 rounded hover:bg-muted"><span>Ad Copy Generator</span> <Star className="w-4 h-4 text-yellow-400"/></li>
               <li className="flex justify-between items-center p-2 rounded hover:bg-muted"><span>Welcome Email</span></li>
               <li className="flex justify-between items-center p-2 rounded hover:bg-muted"><span>Code Documentation</span></li>

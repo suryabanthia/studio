@@ -1,26 +1,22 @@
 import type { Metadata } from 'next';
-// Removed Geist_Sans and Geist_Mono as they are not standard Google Fonts and caused errors.
-// Added Inter and Fira_Code to align with style guidelines (Inter for headers, Fira_Code for code).
 import { Inter, JetBrains_Mono, Fira_Code } from 'next/font/google';
 import './globals.css';
-import { Toaster } from '@/components/ui/toaster';
-import { ThemeProvider } from '@/components/theme-provider';
+// Toaster is now part of Providers
+// ThemeProvider is now part of Providers
+import { Providers } from './providers'; // Import the new Providers component
 
-// Instantiate Inter for headers
 const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
-  weight: ['400', '700'], // Regular and Bold weights
+  weight: ['400', '700'], 
 });
 
-// JetBrains_Mono for code (already configured)
 const jetbrainsMono = JetBrains_Mono({
   variable: '--font-jetbrains-mono',
   subsets: ['latin'],
   weight: ['400', '500', '700'],
 });
 
-// Instantiate Fira_Code for code (alternative/fallback)
 const firaCode = Fira_Code({
   subsets: ['latin'],
   variable: '--font-fira-code',
@@ -39,17 +35,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      {/* Updated body className to include new font variables and remove old ones */}
       <body className={`${inter.variable} ${jetbrainsMono.variable} ${firaCode.variable} antialiased`}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="dark"
-          enableSystem
-          disableTransitionOnChange
-        >
+        <Providers>
           {children}
-          <Toaster />
-        </ThemeProvider>
+          {/* Toaster is now rendered within Providers to ensure it has access to ThemeContext if needed */}
+        </Providers>
       </body>
     </html>
   );

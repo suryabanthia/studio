@@ -1,3 +1,4 @@
+// src/components/layout/main-layout.tsx
 "use client";
 
 import * as React from "react";
@@ -19,7 +20,6 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { SidebarInset } from "@/components/ui/sidebar";
-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -41,7 +41,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
   CommandDialog,
@@ -52,14 +51,15 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
-import { Dialog, DialogContent, DialogHeader, DialogTitle as ShadDialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Dialog as ShadDialog, DialogContent as ShadDialogContent, DialogHeader as ShadDialogHeader, DialogTitle as ShadDialogTitleShad, DialogDescription as ShadDialogDescription, DialogFooter as ShadDialogFooter } from "@/components/ui/dialog"; // Renamed to avoid conflict
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { optimizePrompt, type PromptOptimizerInput, type PromptOptimizerOutput } from "@/ai/flows/prompt-optimizer";
 import { NewPromptDialog, type NewPromptFormValues } from "@/components/dialogs/new-prompt-dialog";
 import { EditPromptDialog } from "@/components/dialogs/edit-prompt-dialog";
 import { VersionHistoryDialog } from "@/components/dialogs/version-history-dialog";
-import { newId as generateNewId, addPromptToTreeStructure, addFolderToTreeStructure, updatePromptInTreeStructure, addPromptNextToSiblingInTree, findPromptInTree, removePromptFromTreeStructure } from "@/lib/prompt-utils";
+import { generateNewId } from "@/lib/prompt-utils";
+
 import {
   Home,
   Settings,
@@ -85,7 +85,7 @@ import {
   LogOut
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContext"; // AuthProvider is now global
 import { useRouter } from "next/navigation";
 import { 
   createPrompt as createPromptAction,
@@ -99,22 +99,22 @@ import {
   exportPrompts as exportPromptsAction,
   importPrompts as importPromptsAction
 } from "@/actions/firebaseActions"; 
-import { useQuery, useMutation, useQueryClient, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; // QueryClientProvider is now global
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Timestamp } from "firebase/firestore";
 
 
 export interface PromptVersion {
-  id: string; // Firestore document ID for the version
+  id: string; 
   versionNumber: number;
   content: string;
-  timestamp: Timestamp | Date; // Allow Date for optimistic updates, convert to Timestamp for Firebase
-  userId?: string; // Denormalized for potential direct queries if needed
-  promptId?: string; // Parent prompt ID
+  timestamp: Timestamp | Date; 
+  userId?: string; 
+  promptId?: string; 
 }
 
 export interface Prompt {
-  id: string; // Firestore document ID
+  id: string; 
   name: string;
   type: "folder" | "prompt";
   icon?: React.ElementType;
@@ -124,13 +124,12 @@ export interface Prompt {
   content?: string;
   history?: PromptVersion[];
   userId?: string;
-  parentId?: string | null; // For folder hierarchy
+  parentId?: string | null; 
   createdAt?: Timestamp | Date;
   updatedAt?: Timestamp | Date;
 }
 
 
-// Helper to convert Firestore Timestamps in fetched data
 const convertTimestamps = (data: any): any => {
   if (data instanceof Timestamp) {
     return data.toDate();
@@ -154,7 +153,7 @@ const PromptTreeItem: React.FC<{
   level: number; 
   onSelectPrompt: (prompt: Prompt) => void; 
   selectedPromptId?: string;
-  onDeletePrompt: (promptId: string, promptName: string) => void;
+  onDeletePrompt: (promptId: string, promptName: string, itemType: "prompt" | "folder") => void;
 }> = ({ item, level, onSelectPrompt, selectedPromptId, onDeletePrompt }) => {
   const [isOpen, setIsOpen] = React.useState(true);
   const { state: sidebarState } = useSidebar();
@@ -177,8 +176,8 @@ const PromptTreeItem: React.FC<{
   const isActive = selectedPromptId === item.id;
 
   const handleDeleteClick = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent selection when clicking delete
-    onDeletePrompt(item.id, item.name);
+    e.stopPropagation(); 
+    onDeletePrompt(item.id, item.name, item.type);
   };
 
   return (
@@ -254,14 +253,14 @@ const AiOptimizerModal: React.FC<{ open: boolean; onOpenChange: (open: boolean) 
   };
 
   return (
-     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[625px] bg-card">
-        <DialogHeader>
-          <ShadDialogTitle className="flex items-center"><Sparkles className="w-5 h-5 mr-2 text-primary" /> AI Prompt Optimizer</ShadDialogTitle>
-          <DialogDescription>
+     <ShadDialog open={open} onOpenChange={onOpenChange}>
+      <ShadDialogContent className="sm:max-w-[625px] bg-card">
+        <ShadDialogHeader>
+          <ShadDialogTitleShad className="flex items-center"><Sparkles className="w-5 h-5 mr-2 text-primary" /> AI Prompt Optimizer</ShadDialogTitleShad>
+          <ShadDialogDescription>
             Enter your prompt below to get AI-powered suggestions for improvement.
-          </DialogDescription>
-        </DialogHeader>
+          </ShadDialogDescription>
+        </ShadDialogHeader>
         <div className="grid gap-4 py-4">
           <Textarea
             placeholder="Enter your prompt here..."
@@ -270,7 +269,7 @@ const AiOptimizerModal: React.FC<{ open: boolean; onOpenChange: (open: boolean) 
             className="min-h-[100px] font-code bg-background"
             aria-label="Prompt to optimize"
           />
-          {isLoading && <p className="text-sm text-muted-foreground">Optimizing...</p>}
+          {isLoading && <LoadingSpinner className="mx-auto" />}
           {suggestions.length > 0 && (
             <div className="space-y-2">
               <h4 className="font-medium">Suggestions:</h4>
@@ -282,18 +281,19 @@ const AiOptimizerModal: React.FC<{ open: boolean; onOpenChange: (open: boolean) 
             </div>
           )}
         </div>
-        <DialogFooter>
+        <ShadDialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={handleSubmit} disabled={isLoading}>
+            {isLoading ? <LoadingSpinner size="xs" className="mr-2"/> : null}
             {isLoading ? "Optimizing..." : "Optimize Prompt"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </ShadDialogFooter>
+      </ShadDialogContent>
+    </ShadDialog>
   );
 };
 
-interface MainLayoutChildrenProps {
+export interface MainLayoutChildrenProps {
   openNewPromptDialog: () => void;
   openOptimizerDialog: (initialPrompt?: string) => void;
   openLoginDialog?: () => void; 
@@ -301,13 +301,20 @@ interface MainLayoutChildrenProps {
 }
 export type PageRenderProps = MainLayoutChildrenProps;
 
-const queryClient = new QueryClient();
 
-
-export function MainLayout({ children }: { children: (props: MainLayoutChildrenProps) => React.ReactNode }) {
+export function MainLayout({ children: renderPropChildren }: { children: (props: MainLayoutChildrenProps) => React.ReactNode }) {
   const { user, loading: authLoading, signOut: firebaseSignOut } = useAuth();
   const router = useRouter();
   const queryClientTanstack = useQueryClient();
+
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') { 
+        if (!authLoading && !user && window.location.pathname !== '/login' && window.location.pathname !== '/signup') {
+            router.push('/login');
+        }
+    }
+  }, [user, authLoading, router, (typeof window !== 'undefined' ? window.location.pathname : '')]);
 
 
   const { data: promptsData, isLoading: isLoadingPrompts, error: promptsError } = useQuery<{ prompts: Prompt[], folders: Prompt[] }, Error>({
@@ -316,21 +323,18 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
       if (!user?.uid) throw new Error("User not authenticated");
       const fetchedPrompts = await getPromptsAction(user.uid);
       const fetchedFolders = await getFoldersAction(user.uid);
-      // Combine prompts and folders, then build hierarchy
-      // For now, returning them separately, hierarchy building can be client-side or server-side
       return { 
         prompts: convertTimestamps(fetchedPrompts), 
         folders: convertTimestamps(fetchedFolders) 
       };
     },
-    enabled: !!user, // Only run if user is logged in
+    enabled: !!user,
   });
   
   const [tree, setTree] = React.useState<Prompt[]>([]);
 
   React.useEffect(() => {
     if (promptsData) {
-      // Basic hierarchy building: assign prompts to folders
       const folderMap = new Map<string, Prompt>();
       promptsData.folders.forEach(f => folderMap.set(f.id, { ...f, children: [] }));
       
@@ -343,10 +347,26 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
         }
       });
       
-      const rootFolders = promptsData.folders.filter(f => !f.parentId || !folderMap.has(f.parentId));
-      setTree([...rootFolders, ...rootPrompts]);
+      const rootFolders = promptsData.folders.filter(f => !f.parentId || !folderMap.has(f.parentId!)); // Ensure parentId exists or is null
+      const newTree = [...rootFolders, ...rootPrompts];
+      
+      // Function to sort children recursively (folders first, then by name)
+      const sortChildren = (nodes: Prompt[]): Prompt[] => {
+        return nodes.map(node => {
+          if (node.children && node.children.length > 0) {
+            node.children = sortChildren(node.children);
+          }
+          return node;
+        }).sort((a, b) => {
+          if (a.type === 'folder' && b.type === 'prompt') return -1;
+          if (a.type === 'prompt' && b.type === 'folder') return 1;
+          return a.name.localeCompare(b.name);
+        });
+      };
+      setTree(sortChildren(newTree));
+
     } else if (!isLoadingPrompts && !user) {
-      setTree([]); // Clear tree if user logs out or no data
+      setTree([]); 
     }
   }, [promptsData, isLoadingPrompts, user]);
 
@@ -359,8 +379,7 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
   const [isEditPromptDialogOpen, setIsEditPromptDialogOpen] = React.useState(false);
   const [isVersionHistoryDialogOpen, setIsVersionHistoryDialogOpen] = React.useState(false);
   const [promptForHistory, setPromptForHistory] = React.useState<Prompt | null>(null);
-  const [promptToDelete, setPromptToDelete] = React.useState<{id: string, name: string} | null>(null);
-
+  const [promptToDelete, setPromptToDelete] = React.useState<{id: string, name: string, type: 'prompt' | 'folder'} | null>(null);
 
   const { setTheme, theme } = useTheme();
   const { toast } = useToast();
@@ -375,15 +394,15 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
     document.addEventListener("keydown", down)
     return () => document.removeEventListener("keydown", down)
   }, []);
+  
+  if (authLoading) {
+     return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
+  }
 
-  // Redirect to login if not authenticated and not on auth pages
-   React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      if (!authLoading && !user && window.location.pathname !== '/login' && window.location.pathname !== '/signup') {
-        router.push('/login');
-      }
-    }
-  }, [user, authLoading, router]);
+  if (!user && typeof window !== 'undefined' && window.location.pathname !== '/login' && window.location.pathname !== '/signup') {
+    // router.push should be handled by useEffect, this return is a fallback or for initial render before effect runs
+    return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /> (Redirecting to login...)</div>;
+  }
 
 
   const handleSelectPrompt = (prompt: Prompt) => {
@@ -408,7 +427,7 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
     onSuccess: (newFolder) => {
       queryClientTanstack.invalidateQueries({ queryKey: ['promptsAndFolders', user?.uid] });
       toast({ title: "Success", description: `Folder "${newFolder.name}" created successfully.` });
-      setIsNewPromptDialogOpen(false); // Assuming the same dialog is used
+      setIsNewPromptDialogOpen(false); 
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: `Failed to create folder: ${error.message}`, variant: "destructive" });
@@ -423,18 +442,16 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
     }
   
     if (data.saveLocationType === "new") {
-      // Create new folder first, then the prompt inside it
       try {
         const newFolder = await createFolderMutation.mutateAsync({
           name: data.newFolderName!,
           parentId: data.newFolderParentId === 'root' ? null : data.newFolderParentId!,
           userId: user.uid,
         });
-        // Now create the prompt within this new folder
         createMutation.mutate({
           name: data.promptName,
           content: data.promptContent,
-          parentId: newFolder.id, // ID of the newly created folder
+          parentId: newFolder.id, 
           userId: user.uid,
           type: "prompt",
         });
@@ -442,11 +459,10 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
         // Error already handled by createFolderMutation.onError
       }
     } else {
-      // Create prompt in existing folder or root
       createMutation.mutate({
         name: data.promptName,
         content: data.promptContent,
-        parentId: data.selectedExistingFolderId === 'root' ? null : data.selectedExistingFolderId,
+        parentId: data.selectedExistingFolderId === 'root' ? null : (data.selectedExistingFolderId || null),
         userId: user.uid,
         type: "prompt",
       });
@@ -482,19 +498,19 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
       }
       setPromptToDelete(null);
     },
-    onError: (error: Error) => {
-      toast({ title: "Error", description: `Failed to delete item: ${error.message}`, variant: "destructive" });
+    onError: (error: Error, variables) => {
+      toast({ title: "Error", description: `Failed to delete item "${variables.promptName}": ${error.message}`, variant: "destructive" });
       setPromptToDelete(null);
     }
   });
 
-  const handleDeletePromptRequest = (promptId: string, promptName: string) => {
-    setPromptToDelete({id: promptId, name: promptName});
+  const handleDeletePromptRequest = (promptId: string, promptName: string, itemType: "prompt" | "folder") => {
+    setPromptToDelete({id: promptId, name: promptName, type: itemType});
   };
 
   const confirmDeletePrompt = () => {
     if (promptToDelete && user) {
-      deleteMutation.mutate({ promptId: promptToDelete.id, userId: user.uid, promptName: promptToDelete.name });
+      deleteMutation.mutate({ promptId: promptToDelete.id, userId: user.uid, promptName: promptToDelete.name, type: promptToDelete.type });
     }
   };
   
@@ -529,13 +545,13 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
       const versions = await getPromptVersionsAction({ promptId: promptForHistory.id, userId: user.uid });
       return convertTimestamps(versions);
     },
-    enabled: !!promptForHistory && !!user?.uid && isVersionHistoryDialogOpen, // only fetch when dialog is open and prompt is selected
+    enabled: !!promptForHistory && !!user?.uid && isVersionHistoryDialogOpen, 
   });
 
 
   const handleOpenVersionHistory = () => {
     if (selectedPrompt && selectedPrompt.type === 'prompt') {
-      setPromptForHistory(selectedPrompt); // This will trigger the query if dialog opens
+      setPromptForHistory(selectedPrompt); 
       setIsVersionHistoryDialogOpen(true);
     } else {
       toast({ title: "Error", description: "Please select a prompt to view its history.", variant: "destructive" });
@@ -554,7 +570,7 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
 
   const handleLogout = async () => {
     await firebaseSignOut();
-    queryClientTanstack.clear(); // Clear react-query cache on logout
+    queryClientTanstack.clear(); 
     router.push('/login');
   };
   
@@ -612,309 +628,296 @@ export function MainLayout({ children }: { children: (props: MainLayoutChildrenP
     fileInput.click();
   };
 
-
   const sidebarWidth = "280px";
   
-  // Loading state for initial auth check or if user is null and not on auth pages
-  if (authLoading || (!user && typeof window !== 'undefined' && window.location.pathname !== '/login' && window.location.pathname !== '/signup')) {
-    return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
-  }
-
-
   return (
-    <AuthProvider>
-      <QueryClientProvider client={queryClient}>
-        <SidebarProvider defaultOpen={true}>
-          <style jsx global>{`
-            :root {
-              --sidebar-width: ${sidebarWidth} !important;
-            }
-          `}</style>
-          <Sidebar collapsible="icon" variant="sidebar" className="border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
-            <SidebarHeader className="p-4 h-[72px] flex items-center justify-between">
-              <Link href="/" className="flex items-center gap-2 logo-glow">
-                <Palette className="w-8 h-8 text-primary" />
-                <h1 className="text-xl font-bold text-foreground group-data-[collapsible=icon]:hidden">PromptVerse</h1>
-              </Link>
-              <SidebarTrigger className="group-data-[collapsible=icon]:hidden" />
-            </SidebarHeader>
-            <SidebarContent className="p-2">
-              <div className="mb-2 px-2 group-data-[collapsible=icon]:hidden">
-                <Button variant="outline" className="w-full justify-start text-muted-foreground" onClick={() => setIsSearchOpen(true)}>
-                  <Search className="w-4 h-4 mr-2" />
-                  Search...
-                  <kbd className="ml-auto pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
-                    <span className="text-xs">⌘</span>K
-                  </kbd>
-                </Button>
-              </div>
-              <ScrollArea className="h-[calc(100vh-200px)] group-data-[collapsible=icon]:h-[calc(100vh-140px)]">
-                <SidebarMenu>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild tooltip="Home">
-                      <Link href="/">
-                        <Home className="h-4 w-4" /> <span className="truncate">Home</span>
-                      </Link>
+    <SidebarProvider defaultOpen={true}>
+      <style jsx global>{`
+        :root {
+          --sidebar-width: ${sidebarWidth} !important;
+        }
+      `}</style>
+      <Sidebar collapsible="icon" variant="sidebar" className="border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+        <SidebarHeader className="p-4 h-[72px] flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2 logo-glow">
+            <Palette className="w-8 h-8 text-primary" />
+            <h1 className="text-xl font-bold text-foreground group-data-[collapsible=icon]:hidden">PromptVerse</h1>
+          </Link>
+          <SidebarTrigger className="group-data-[collapsible=icon]:hidden" />
+        </SidebarHeader>
+        <SidebarContent className="p-2">
+          <div className="mb-2 px-2 group-data-[collapsible=icon]:hidden">
+            <Button variant="outline" className="w-full justify-start text-muted-foreground" onClick={() => setIsSearchOpen(true)}>
+              <Search className="w-4 h-4 mr-2" />
+              Search...
+              <kbd className="ml-auto pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+                <span className="text-xs">⌘</span>K
+              </kbd>
+            </Button>
+          </div>
+          <ScrollArea className="h-[calc(100vh-200px)] group-data-[collapsible=icon]:h-[calc(100vh-140px)]">
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="Home">
+                  <Link href="/">
+                    <Home className="h-4 w-4" /> <span className="truncate">Home</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              
+              <SidebarGroup>
+                <SidebarGroupLabel tooltip="Prompts" className="flex items-center">
+                  <BookOpen className="h-4 w-4 mr-2"/> Prompts
+                </SidebarGroupLabel>
+                {isLoadingPrompts && <LoadingSpinner className="mx-auto my-4" />}
+                {!isLoadingPrompts && tree.map((item) => (
+                  <PromptTreeItem 
+                    key={item.id} 
+                    item={item} 
+                    level={0} 
+                    onSelectPrompt={handleSelectPrompt} 
+                    selectedPromptId={selectedPrompt?.id}
+                    onDeletePrompt={handleDeletePromptRequest}
+                  />
+                ))}
+              </SidebarGroup>
+
+              <SidebarGroup>
+                <SidebarGroupLabel tooltip="Tools" className="flex items-center"> Tools </SidebarGroupLabel>
+                <SidebarMenuItem>
+                    <SidebarMenuButton onClick={() => handleOpenOptimizerDialog()} tooltip="AI Optimizer">
+                      <Sparkles className="h-4 w-4" /> <span className="truncate">AI Optimizer</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
-                  
-                  <SidebarGroup>
-                    <SidebarGroupLabel tooltip="Prompts" className="flex items-center">
-                      <BookOpen className="h-4 w-4 mr-2"/> Prompts
-                    </SidebarGroupLabel>
-                    {isLoadingPrompts && <LoadingSpinner className="mx-auto my-4" />}
-                    {!isLoadingPrompts && tree.map((item) => (
-                      <PromptTreeItem 
-                        key={item.id} 
-                        item={item} 
-                        level={0} 
-                        onSelectPrompt={handleSelectPrompt} 
-                        selectedPromptId={selectedPrompt?.id}
-                        onDeletePrompt={handleDeletePromptRequest}
-                      />
-                    ))}
-                  </SidebarGroup>
+              </SidebarGroup>
+            </SidebarMenu>
+          </ScrollArea>
+        </SidebarContent>
+        <SidebarFooter className="p-4 border-t border-sidebar-border group-data-[collapsible=icon]:p-2">
+        {user ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="w-full justify-start p-2">
+                <Avatar className="h-8 w-8 mr-2">
+                  <AvatarImage src={user.photoURL || `https://picsum.photos/seed/${user.uid}/40/40`} alt={user.displayName || "User Avatar"} data-ai-hint="profile avatar" />
+                  <AvatarFallback>{user.displayName?.substring(0,2).toUpperCase() || "PV"}</AvatarFallback>
+                </Avatar>
+                <div className="truncate group-data-[collapsible=icon]:hidden">
+                  <p className="font-semibold text-sm">{user.displayName || "Prompt User"}</p>
+                  <p className="text-xs text-muted-foreground">{user.email || "user@promptverse.ai"}</p>
+                </div>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="top" align="start" className="w-56 bg-popover">
+              <DropdownMenuLabel>My Account</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => router.push('/profile')} disabled> Profile (soon)</DropdownMenuItem> 
+              <DropdownMenuItem onClick={() => router.push('/settings')}><Settings className="mr-2 h-4 w-4" /> Settings</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+                {theme === "dark" ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
+                Switch to {theme === "dark" ? "Light" : "Dark"} Mode
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => toast({ title: "Coming Soon!", description: "Help & Support will be available in a future update."})}><LifeBuoy className="mr-2 h-4 w-4" /> Help & Support</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleLogout}><LogOut className="mr-2 h-4 w-4" />Log out</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+            <div className="flex flex-col gap-2 group-data-[collapsible=icon]:hidden">
+                <Button onClick={handleOpenLoginDialog} className="w-full"><LogIn className="mr-2 h-4 w-4"/> Login</Button>
+                <Button onClick={handleOpenSignupDialog} variant="outline" className="w-full"><UserPlus className="mr-2 h-4 w-4"/>Sign Up</Button>
+            </div>
+        )}
+        </SidebarFooter>
+      </Sidebar>
 
-                  <SidebarGroup>
-                    <SidebarGroupLabel tooltip="Tools" className="flex items-center"> Tools </SidebarGroupLabel>
-                    <SidebarMenuItem>
-                        <SidebarMenuButton onClick={() => handleOpenOptimizerDialog()} tooltip="AI Optimizer">
-                          <Sparkles className="h-4 w-4" /> <span className="truncate">AI Optimizer</span>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                  </SidebarGroup>
-                </SidebarMenu>
-              </ScrollArea>
-            </SidebarContent>
-            <SidebarFooter className="p-4 border-t border-sidebar-border group-data-[collapsible=icon]:p-2">
-            {user ? (
-              <DropdownMenu>
+      <SidebarInset>
+        <header className="sticky top-0 z-10 flex items-center h-[72px] border-b bg-background px-6 shadow-sm">
+          <div className="flex-1">
+            <h2 className="text-2xl font-semibold">
+              {selectedPrompt ? selectedPrompt.name : "Dashboard"}
+            </h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => handleOpenOptimizerDialog(selectedPrompt?.content)} disabled={!user}>
+              <Sparkles className="mr-2 h-4 w-4" /> Optimize
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" id="import-button-mainlayout" disabled={!user || importMutation.isPending}>
+                  <UploadCloud className="mr-2 h-4 w-4" /> Import {importMutation.isPending && <LoadingSpinner size="xs" className="ml-1" />}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleImport} disabled={importMutation.isPending}>
+                  Import from File (.json, .csv)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="w-full justify-start p-2">
-                    <Avatar className="h-8 w-8 mr-2">
-                      <AvatarImage src={user.photoURL || `https://picsum.photos/seed/${user.uid}/40/40`} alt={user.displayName || "User Avatar"} data-ai-hint="profile avatar" />
-                      <AvatarFallback>{user.displayName?.substring(0,2).toUpperCase() || "PV"}</AvatarFallback>
-                    </Avatar>
-                    <div className="truncate group-data-[collapsible=icon]:hidden">
-                      <p className="font-semibold text-sm">{user.displayName || "Prompt User"}</p>
-                      <p className="text-xs text-muted-foreground">{user.email || "user@promptverse.ai"}</p>
-                    </div>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent side="top" align="start" className="w-56 bg-popover">
-                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => router.push('/profile')}> Profile</DropdownMenuItem> 
-                  <DropdownMenuItem onClick={() => router.push('/settings')}><Settings className="mr-2 h-4 w-4" /> Settings</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
-                    {theme === "dark" ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
-                    Switch to {theme === "dark" ? "Light" : "Dark"} Mode
-                  </DropdownMenuItem>
-                  <DropdownMenuItem><LifeBuoy className="mr-2 h-4 w-4" /> Help & Support</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout}><LogOut className="mr-2 h-4 w-4" />Log out</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
-                <div className="flex flex-col gap-2 group-data-[collapsible=icon]:hidden">
-                   <Button onClick={handleOpenLoginDialog} className="w-full"><LogIn className="mr-2 h-4 w-4"/> Login</Button>
-                   <Button onClick={handleOpenSignupDialog} variant="outline" className="w-full"><UserPlus className="mr-2 h-4 w-4"/>Sign Up</Button>
-                </div>
-            )}
-            </SidebarFooter>
-          </Sidebar>
-
-          <SidebarInset>
-            <header className="sticky top-0 z-10 flex items-center h-[72px] border-b bg-background px-6 shadow-sm">
-              <div className="flex-1">
-                <h2 className="text-2xl font-semibold">
-                  {selectedPrompt ? selectedPrompt.name : "Dashboard"}
-                </h2>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => handleOpenOptimizerDialog(selectedPrompt?.content)} disabled={!user}>
-                  <Sparkles className="mr-2 h-4 w-4" /> Optimize
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" disabled={!user || importMutation.isPending}>
-                      <UploadCloud className="mr-2 h-4 w-4" /> Import {importMutation.isPending && <LoadingSpinner size="xs" className="ml-1" />}
+                    <Button variant="outline" size="sm" disabled={!user || exportMutation.isPending}>
+                        <DownloadCloud className="mr-2 h-4 w-4" /> Export {exportMutation.isPending && <LoadingSpinner size="xs" className="ml-1" />}
                     </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={handleImport} disabled={importMutation.isPending}>
-                      Import from File (.json, .csv)
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => exportMutation.mutate("json")} disabled={exportMutation.isPending}>
+                        Export as JSON
                     </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" disabled={!user || exportMutation.isPending}>
-                            <DownloadCloud className="mr-2 h-4 w-4" /> Export {exportMutation.isPending && <LoadingSpinner size="xs" className="ml-1" />}
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => exportMutation.mutate("json")} disabled={exportMutation.isPending}>
-                            Export as JSON
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => exportMutation.mutate("csv")} disabled={exportMutation.isPending}>
-                            Export as CSV
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-                <Button size="sm" onClick={handleOpenNewPromptDialog} disabled={!user || createMutation.isPending || createFolderMutation.isPending}>
-                  <PlusCircle className="mr-2 h-4 w-4" /> New Item
-                </Button>
-                <SidebarTrigger className="md:hidden" />
-              </div>
-            </header>
+                    <DropdownMenuItem onClick={() => exportMutation.mutate("csv")} disabled={exportMutation.isPending}>
+                        Export as CSV
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+            <Button size="sm" onClick={handleOpenNewPromptDialog} disabled={!user || createMutation.isPending || createFolderMutation.isPending}>
+              <PlusCircle className="mr-2 h-4 w-4" /> New Item
+            </Button>
+            <SidebarTrigger className="md:hidden" />
+          </div>
+        </header>
 
-            <main className="flex-1 p-6">
-              {authLoading && <div className="flex items-center justify-center h-full"><LoadingSpinner size="lg" /></div>}
-              {!authLoading && !user && (
-                <div className="flex flex-col items-center justify-center text-center p-6">
-                  <p className="text-xl text-muted-foreground mb-8 max-w-2xl">
-                    Please <Link href="/login" className="text-primary hover:underline">login</Link> or <Link href="/signup" className="text-primary hover:underline">sign up</Link> to manage your prompts.
-                  </p>
+        <main className="flex-1 p-6">
+          {!authLoading && !user && (
+            <div className="flex flex-col items-center justify-center text-center p-6 min-h-[calc(100vh-200px)]">
+              <p className="text-xl text-muted-foreground mb-8 max-w-2xl">
+                Please <Link href="/login" className="text-primary hover:underline">login</Link> or <Link href="/signup" className="text-primary hover:underline">sign up</Link> to manage your prompts.
+              </p>
+            </div>
+          )}
+          {!authLoading && user && (
+            <>
+              {isLoadingPrompts && (
+                <div className="flex items-center justify-center h-full">
+                  <LoadingSpinner size="lg" />
+                  <p className="ml-2">Loading prompts...</p>
                 </div>
               )}
-              {!authLoading && user && (
-                <>
-                  {isLoadingPrompts && (
-                    <div className="flex items-center justify-center h-full">
-                      <LoadingSpinner size="lg" />
-                      <p className="ml-2">Loading prompts...</p>
-                    </div>
-                  )}
-                  {promptsError && (
-                    <div className="text-destructive p-4 bg-destructive/10 rounded-md">
-                      Error loading data: {promptsError.message}. Please try refreshing. If the issue persists, check your Firebase configuration.
-                    </div>
-                  )}
-                  {!isLoadingPrompts && !promptsError && (
-                    selectedPrompt && selectedPrompt.type === 'prompt' ? (
-                      <Card className="bg-card p-6 rounded-lg shadow">
-                        <CardHeader className="flex flex-row justify-between items-center mb-4 p-0">
-                          <ShadDialogTitle className="text-xl font-semibold">{selectedPrompt.name}</ShadDialogTitle>
-                          <div className="flex gap-2">
-                            <Button variant="ghost" size="sm" onClick={() => handleOpenOptimizerDialog(selectedPrompt?.content)}><Sparkles className="mr-1 h-4 w-4" /> Optimize</Button>
-                            <Button variant="ghost" size="sm" onClick={handleOpenVersionHistory}><History className="mr-1 h-4 w-4" /> Versions ({selectedPrompt.versions || 0})</Button>
-                            <Button variant="ghost" size="sm" onClick={handleBranchPrompt} disabled={!selectedPrompt || selectedPrompt.type !== 'prompt' || branchMutation.isPending}><GitFork className="mr-1 h-4 w-4" /> Branch {branchMutation.isPending && <LoadingSpinner size="xs" className="ml-1"/>}</Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDeletePromptRequest(selectedPrompt.id, selectedPrompt.name)}><Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" /></Button>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="p-0">
-                          <Textarea
-                            value={selectedPrompt.content ?? ""}
-                            readOnly 
-                            className="w-full min-h-[300px] p-4 font-code text-sm bg-background rounded-md border"
-                            aria-label="Selected prompt content"
-                          />
-                          <div className="mt-4 flex justify-end">
-                            <Button onClick={handleOpenEditPromptDialog} disabled={updateMutation.isPending}>Edit Prompt {updateMutation.isPending && <LoadingSpinner size="xs" className="ml-1"/>}</Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ) : (
-                      children({ openNewPromptDialog: handleOpenNewPromptDialog, openOptimizerDialog: handleOpenOptimizerDialog, openLoginDialog, openSignupDialog })
-                    )
-                  )}
-                </>
+              {promptsError && (
+                <div className="text-destructive p-4 bg-destructive/10 rounded-md">
+                  Error loading data: {promptsError.message}. Please try refreshing. If the issue persists, check your Firebase configuration.
+                </div>
               )}
-            </main>
-          </SidebarInset>
-          <CommandDialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
-            <ShadDialogTitle className="sr-only">Command Menu</ShadDialogTitle>
-            <DialogDescription className="sr-only">Use this to search for prompts or execute commands.</DialogDescription>
-            <CommandInput placeholder="Type a command or search..." />
-            <CommandList>
-              <CommandEmpty>No results found.</CommandEmpty>
-              <CommandGroup heading="Suggestions">
-                <CommandItem onSelect={() => { 
-                    const demoPrompt = tree.flatMap(p => 
-                        p.type === 'folder' && p.children ? 
-                        p.children.filter(c => c.name === 'Ad Copy Generator' && c.type === 'prompt') : 
-                        (p.name === 'Ad Copy Generator' && p.type === 'prompt' ? [p] : [])
-                    ).flat()[0];
-                    if(demoPrompt) { handleSelectPrompt(demoPrompt); }
-                    setIsSearchOpen(false); 
-                }}>
-                    <FileText className="mr-2 h-4 w-4" />
-                    <span>Open "Ad Copy Generator"</span>
-                </CommandItem>
-                <CommandItem onSelect={() => { handleOpenOptimizerDialog(); setIsSearchOpen(false); }}>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    <span>Open AI Optimizer</span>
-                </CommandItem>
-                <CommandItem onSelect={() => { handleOpenNewPromptDialog(); setIsSearchOpen(false); }}>
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    <span>Create New Item</span>
-                </CommandItem>
-              </CommandGroup>
-              <CommandSeparator />
-              <CommandGroup heading="Prompts & Folders">
-                {tree.flatMap(item => item.type === 'folder' && item.children ? 
-                    item.children : 
-                    (item.type === 'prompt' ? [item] : []) // Only show prompts in search for now, or add folder searching
-                ).map(prompt => (
-                    prompt && <CommandItem key={prompt.id} onSelect={() => { handleSelectPrompt(prompt); setIsSearchOpen(false); }}>
-                        {React.createElement(prompt.icon || FileText, {className: "mr-2 h-4 w-4"})}
-                        <span>{prompt.name}</span>
-                    </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </CommandDialog>
-          <AiOptimizerModal 
-            open={isOptimizerOpen} 
-            onOpenChange={setIsOptimizerOpen} 
-            initialPrompt={optimizerInitialPrompt}
-          />
-          <NewPromptDialog 
-            open={isNewPromptDialogOpen} 
-            onOpenChange={setIsNewPromptDialogOpen}
-            allPrompts={tree}
-            onCreate={handleCreateNewItem}
-            isLoading={createMutation.isPending || createFolderMutation.isPending}
-          />
-          {selectedPrompt && selectedPrompt.type === 'prompt' && (
-            <EditPromptDialog
-              open={isEditPromptDialogOpen}
-              onOpenChange={setIsEditPromptDialogOpen}
-              promptName={selectedPrompt.name}
-              initialContent={selectedPrompt.content || ""}
-              onSave={handleSaveChangesToPrompt}
-              isLoading={updateMutation.isPending}
-            />
+              {!isLoadingPrompts && !promptsError && (
+                selectedPrompt && selectedPrompt.type === 'prompt' ? (
+                  <ShadDialogContent className="bg-card p-6 rounded-lg shadow w-full max-w-2xl mx-auto"> {/* Changed from Card */}
+                    <ShadDialogHeader className="flex flex-row justify-between items-center mb-4 p-0"> {/* Changed from CardHeader */}
+                      <ShadDialogTitleShad className="text-xl font-semibold">{selectedPrompt.name}</ShadDialogTitleShad> {/* Changed from CardTitle */}
+                      <div className="flex gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => handleOpenOptimizerDialog(selectedPrompt?.content)}><Sparkles className="mr-1 h-4 w-4" /> Optimize</Button>
+                        <Button variant="ghost" size="sm" onClick={handleOpenVersionHistory}><History className="mr-1 h-4 w-4" /> Versions ({selectedPrompt.versions || 0})</Button>
+                        <Button variant="ghost" size="sm" onClick={handleBranchPrompt} disabled={!selectedPrompt || selectedPrompt.type !== 'prompt' || branchMutation.isPending}><GitFork className="mr-1 h-4 w-4" /> Branch {branchMutation.isPending && <LoadingSpinner size="xs" className="ml-1"/>}</Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDeletePromptRequest(selectedPrompt.id, selectedPrompt.name, "prompt")}><Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" /></Button>
+                      </div>
+                    </ShadDialogHeader>
+                    <div className="p-0"> {/* Changed from CardContent */}
+                      <Textarea
+                        value={selectedPrompt.content ?? ""}
+                        readOnly 
+                        className="w-full min-h-[300px] p-4 font-code text-sm bg-background rounded-md border"
+                        aria-label="Selected prompt content"
+                      />
+                      <div className="mt-4 flex justify-end">
+                        <Button onClick={handleOpenEditPromptDialog} disabled={updateMutation.isPending}>Edit Prompt {updateMutation.isPending && <LoadingSpinner size="xs" className="ml-1"/>}</Button>
+                      </div>
+                    </div>
+                  </ShadDialogContent>
+                ) : (
+                  renderPropChildren({ openNewPromptDialog: handleOpenNewPromptDialog, openOptimizerDialog: handleOpenOptimizerDialog, openLoginDialog, openSignupDialog })
+                )
+              )}
+            </>
           )}
-          <VersionHistoryDialog
-            open={isVersionHistoryDialogOpen}
-            onOpenChange={setIsVersionHistoryDialogOpen}
-            prompt={promptForHistory} // This is the currently selected prompt
-            versions={versionHistoryData || []} // Pass fetched versions
-            isLoading={isLoadingVersions}
-          />
-          {promptToDelete && (
-            <AlertDialog open={!!promptToDelete} onOpenChange={() => setPromptToDelete(null)}>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Are you sure you want to delete "{promptToDelete.name}"?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This action cannot be undone. This will permanently delete the item and all its associated data (including versions or nested items if it's a folder).
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel onClick={() => setPromptToDelete(null)}>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={confirmDeletePrompt} disabled={deleteMutation.isPending}>
-                    {deleteMutation.isPending ? <><LoadingSpinner size="xs" className="mr-2"/> Deleting...</> : "Delete"}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
-        </SidebarProvider>
-      </QueryClientProvider>
-    </AuthProvider>
+        </main>
+      </SidebarInset>
+      <CommandDialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
+          {/* ShadDialogTitle is implicitly handled by CommandDialog for accessibility */}
+          <CommandInput placeholder="Type a command or search..." />
+          <CommandList>
+            <CommandEmpty>No results found.</CommandEmpty>
+            <CommandGroup heading="Suggestions">
+              <CommandItem onSelect={() => { 
+                  const demoPrompt = tree.flatMap(p => 
+                      p.type === 'folder' && p.children ? 
+                      p.children.filter(c => c.name === 'Ad Copy Generator' && c.type === 'prompt') : 
+                      (p.name === 'Ad Copy Generator' && p.type === 'prompt' ? [p] : [])
+                  ).flat()[0];
+                  if(demoPrompt) { handleSelectPrompt(demoPrompt); }
+                  setIsSearchOpen(false); 
+              }}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  <span>Open "Ad Copy Generator"</span>
+              </CommandItem>
+              <CommandItem onSelect={() => { handleOpenOptimizerDialog(); setIsSearchOpen(false); }}>
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  <span>Open AI Optimizer</span>
+              </CommandItem>
+              <CommandItem onSelect={() => { handleOpenNewPromptDialog(); setIsSearchOpen(false); }}>
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  <span>Create New Item</span>
+              </CommandItem>
+            </CommandGroup>
+            <CommandSeparator />
+            <CommandGroup heading="Prompts & Folders">
+              {tree.flatMap(item => item.type === 'folder' && item.children ? 
+                  item.children : 
+                  (item.type === 'prompt' ? [item] : []) 
+              ).map(prompt => (
+                  prompt && <CommandItem key={prompt.id} onSelect={() => { handleSelectPrompt(prompt); setIsSearchOpen(false); }}>
+                      {React.createElement(prompt.icon || FileText, {className: "mr-2 h-4 w-4"})}
+                      <span>{prompt.name}</span>
+                  </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </CommandDialog>
+      <AiOptimizerModal 
+        open={isOptimizerOpen} 
+        onOpenChange={setIsOptimizerOpen} 
+        initialPrompt={optimizerInitialPrompt}
+      />
+      <NewPromptDialog 
+        open={isNewPromptDialogOpen} 
+        onOpenChange={setIsNewPromptDialogOpen}
+        allPrompts={tree}
+        onCreate={handleCreateNewItem}
+        
+      />
+      {selectedPrompt && selectedPrompt.type === 'prompt' && (
+        <EditPromptDialog
+          open={isEditPromptDialogOpen}
+          onOpenChange={setIsEditPromptDialogOpen}
+          promptName={selectedPrompt.name}
+          initialContent={selectedPrompt.content || ""}
+          onSave={handleSaveChangesToPrompt}
+          
+        />
+      )}
+      <VersionHistoryDialog
+        open={isVersionHistoryDialogOpen}
+        onOpenChange={setIsVersionHistoryDialogOpen}
+        prompt={promptForHistory} 
+        versions={versionHistoryData || []} 
+        isLoading={isLoadingVersions}
+      />
+      {promptToDelete && (
+        <AlertDialog open={!!promptToDelete} onOpenChange={() => setPromptToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure you want to delete "{promptToDelete.name}"?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the item {promptToDelete.type === 'folder' ? 'and all its contents' : 'and all its versions'}.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setPromptToDelete(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDeletePrompt} disabled={deleteMutation.isPending}>
+                {deleteMutation.isPending ? <><LoadingSpinner size="xs" className="mr-2"/> Deleting...</> : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+    </SidebarProvider>
   );
 }
